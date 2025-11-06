@@ -908,6 +908,172 @@ class ResearchOrchestrator:
 
 ---
 
+#### Semantic Table Augmentation: 🚧 IN PROGRESS (2025-11-06)
+
+**Implementation Status:**
+
+- **Purpose:** Enhance content-extractor with semantic search-based validation and context augmentation
+- **Approach:** Multi-pronged extraction combining structural (docling) + semantic (RAG) methods
+- **Status:** 2/8 phases completed
+- **Progress:** Foundation infrastructure complete, augmentation engine in progress
+
+**Architecture Overview:**
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                 SEMANTIC AUGMENTATION PIPELINE                   │
+│                                                                   │
+│  PDF Paper → Docling Extraction → Structural Tables              │
+│       ↓                                                           │
+│  PDF Paper → Semantic Search → Context Extraction                │
+│                     ↓                                             │
+│            Augmented Tables + Context + Validation                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Completed Phases:**
+
+✅ **Phase 1: Semantic Search Infrastructure (COMPLETE)**
+
+- **Files Created:**
+  - `src/augmentation_config.py` (215 lines) - Configuration with environment variable support
+  - `src/semantic_search.py` (393 lines) - Core RAG pipeline using HuggingFace embeddings + ChromaDB
+
+- **Key Capabilities:**
+  - PDF text extraction and chunking (1000 chars, 200 overlap)
+  - Vector embeddings using sentence-transformers
+  - In-memory ChromaDB vectorstore for fast semantic search
+  - Question-answering with Claude Haiku (optimized for speed)
+  - Async batch processing with semaphore-based concurrency control
+  - Confidence scoring based on chunk similarity + answer quality
+
+- **Configuration Options:**
+  - Embedding model: `sentence-transformers/all-MiniLM-L6-v2` (default, fast)
+  - LLM: `claude-haiku-4-5-20251001` (fast validation/extraction)
+  - Temperature: 0.1 (low for factual extraction)
+  - Top-k chunks: 5, similarity threshold: 0.6
+  - Validation threshold: 5% relative tolerance
+  - All configurable via environment variables
+
+✅ **Phase 2: Context Extractors (COMPLETE)**
+
+- **Files Created:**
+  - `src/context_models.py` (296 lines) - Pydantic models for semantic contexts
+  - `src/context_extractors.py` (583 lines) - 5 specialized extractors
+
+- **Pydantic Models (8 types):**
+  - `VariableContext` - Variable definitions, units, measurement methods, data sources
+  - `TreatmentContext` - Treatment/control arm descriptions (duration, intensity, delivery)
+  - `StudyContext` - Study design, sample characteristics, setting, time period
+  - `MethodsContext` - Statistical methods, standard errors, controls, fixed effects
+  - `OutcomeContext` - Outcome measurement details, instruments, scales
+  - `ValidationResult` - Cross-validation of parsed values vs semantic extraction
+  - `HarmonizationMetadata` - Standardized fields for Phase 4 harmonization
+  - `TableContext` - Comprehensive augmentation combining all context types
+
+- **Specialized Extractors (5 classes):**
+  - `VariableContextExtractor` - Extracts semantic context for each variable via targeted QA
+  - `TreatmentContextExtractor` - Extracts treatment/control descriptions from paper text
+  - `StudyContextExtractor` - Extracts study design, sample, inclusion/exclusion criteria
+  - `MethodsContextExtractor` - Extracts statistical methods for specific tables
+  - `OutcomeContextExtractor` - Extracts outcome measurement and collection details
+
+- **Key Design Patterns:**
+  - Each extractor uses domain-specific question sets
+  - Async batch processing for concurrent QA queries
+  - Confidence scoring for all extracted information
+  - Source tracking (page numbers, sections)
+  - Fallback handling for missing information
+
+**Remaining Phases:**
+
+🚧 **Phase 3: Table Augmentation Engine (IN PROGRESS)**
+
+- Create `src/table_augmenter.py` - Main orchestrator
+- Implement `augment_regression_table()`, `augment_summary_stats_table()`, `augment_balance_table()`
+- Coordinate all extractors for complete table augmentation
+- Filter results by confidence thresholds
+
+📋 **Phase 4: Semantic Validator (PENDING)**
+
+- Create `src/semantic_validator.py`
+- Cross-validate parsed numerical values using semantic search
+- Implement coefficient validation and table value verification
+- Generate ValidationResult objects with discrepancy analysis
+
+📋 **Phase 5: Integration into Content-Extractor (PENDING)**
+
+- Update `.claude/subagents/content-extractor/extractor.py`
+- Add augmentation workflow to extraction pipeline
+- Enable/disable augmentation via config flag
+- Integrate validation feedback loop
+
+📋 **Phase 6: Update parse.py Models (PENDING)**
+
+- Add context fields to existing Pydantic models:
+  - `RegressionCoefficient`: Add `variable_context`, `validation` fields
+  - `RegressionModel`: Add `methods_context` field
+  - `RegressionTable`: Add `study_context`, `treatment_contexts`, `variable_contexts`
+  - Similar updates for `SummaryStatisticsTable` and `BalanceTable`
+
+📋 **Phase 7: Update Dependencies (PENDING)**
+
+- Update `pyproject.toml` with new dependencies:
+  - `langchain`, `langchain-anthropic`, `langchain-chroma`, `langchain-huggingface`
+  - `chromadb`
+  - `sentence-transformers` (or `model2vec` for lightweight alternative)
+
+📋 **Phase 8: Testing and Refinement (PENDING)**
+
+- Unit tests for each extractor
+- Integration tests with sample papers
+- Validation against ground truth data
+- Performance benchmarking
+- Documentation updates
+
+**Key Architecture Decisions:**
+
+1. **In-memory ChromaDB** - Chosen for speed (no need to persist per-document vectorstores)
+2. **Claude Haiku for QA** - Fast model for validation/extraction vs Sonnet for synthesis
+3. **Async Batch Processing** - Concurrent question-answering with semaphore limits
+4. **Modular Extractors** - Separated by context type for maintainability and testing
+5. **Confidence-based Filtering** - Only include context above minimum confidence threshold
+6. **Multi-pronged Approach** - Combine structural extraction (docling) + semantic extraction (RAG) for accuracy
+
+**Integration with Existing Systems:**
+
+- Augmentation runs **after** docling extraction in content-extractor pipeline
+- Uses same PDF input as structural extraction
+- Enriches existing Pydantic table models with semantic context
+- Validates parsed values against paper text to reduce hallucinations
+- Prepares harmonization metadata for Phase 4 data-harmonizer
+
+**Expected Benefits:**
+
+1. **Reduced Errors** - Cross-validation of parsed values catches extraction mistakes
+2. **Rich Context** - Variable definitions, treatment details enable better harmonization
+3. **Quality Scoring** - Confidence metrics help identify low-quality extractions
+4. **Harmonization-Ready** - Structured metadata fields enable automated cross-study mapping
+5. **Replication Support** - Detailed methods context aids in study replication
+
+**Next Immediate Steps:**
+
+1. Complete Phase 3: Implement `table_augmenter.py` orchestrator
+2. Complete Phase 4: Implement `semantic_validator.py`
+3. Integrate into content-extractor workflow
+4. Update pyproject.toml dependencies
+5. Test with real papers and validate improvements
+
+**Documentation:**
+
+- Configuration: `src/augmentation_config.py`
+- Core pipeline: `src/semantic_search.py`
+- Data models: `src/context_models.py`
+- Extractors: `src/context_extractors.py`
+- Architecture: This document
+
+---
+
 ### Phase 2: Analysis Pipeline (Weeks 5-8)
 
 **Priority: High**
@@ -1154,6 +1320,13 @@ All subagents log to structured format:
 
 ## Changelog
 
+### Version 1.1 (2025-11-06)
+
+- Added semantic table augmentation implementation (Phases 1-2 complete)
+- Created 4 new source files for semantic search and context extraction
+- Documented multi-pronged extraction approach combining structural + semantic methods
+- Updated Phase 1 progress with semantic augmentation status
+
 ### Version 1.0 (2025-11-05)
 
 - Initial architecture design
@@ -1165,9 +1338,10 @@ All subagents log to structured format:
 
 **Next Steps:**
 
-1. Review and approve architecture
-2. Prioritize Phase 1 implementations
-3. Create subagent specification documents
-4. Begin implementation of `content-extractor`
+1. Complete Phase 3: Implement table augmentation engine (`table_augmenter.py`)
+2. Complete Phase 4: Implement semantic validator (`semantic_validator.py`)
+3. Integrate semantic augmentation into content-extractor workflow
+4. Update pyproject.toml with new dependencies
+5. Test augmentation pipeline with real papers
 
 **For Questions:** Refer to skills in `.claude/skills/` or update this document as architecture evolves.
