@@ -1,4 +1,4 @@
-"""Content Extractor Subagent Implementation
+"""Content Extractor Subagent Implementation.
 
 This module implements the content-extractor subagent for systematic extraction
 of structured content from research papers.
@@ -6,14 +6,20 @@ of structured content from research papers.
 Usage:
     uv run python extractor.py paper.pdf --output-dir extracted
     uv run python extractor.py batch papers_catalog.json --parallel --workers 4
+    uv run python extractor.py paper.pdf --augment  # Enable semantic augmentation
 """
 
 import asyncio
 import json
 import logging
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
+
+# Add src directory to path for imports
+src_path = Path(__file__).resolve().parents[3] / "src"
+sys.path.insert(0, str(src_path))
 
 # Configure logging
 logging.basicConfig(
@@ -23,22 +29,38 @@ logger = logging.getLogger(__name__)
 
 
 class ContentExtractor:
-    """Content Extractor Subagent
+    """Content Extractor Subagent.
 
     Performs comprehensive extraction of structured content from research papers,
     including tables, figures, citations, and methodology details.
     """
 
-    def __init__(self, output_dir: str = "extracted"):
+    def __init__(
+        self, output_dir: str = "extracted", enable_augmentation: bool = False
+    ):
         """Initialize the content extractor.
 
         Args:
             output_dir: Base directory for extraction outputs
+            enable_augmentation: Enable semantic augmentation of tables
 
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"ContentExtractor initialized with output_dir={self.output_dir}")
+        self.enable_augmentation = enable_augmentation
+
+        # Lazy-load augmentation components
+        self.table_augmenter = None
+        self.semantic_validator = None
+
+        if enable_augmentation:
+            logger.info("Semantic augmentation enabled - initializing components")
+            self._initialize_augmentation()
+
+        logger.info(
+            f"ContentExtractor initialized with output_dir={self.output_dir}, "
+            f"augmentation={'enabled' if enable_augmentation else 'disabled'}"
+        )
 
     async def process_paper(
         self,
@@ -105,6 +127,19 @@ class ContentExtractor:
                     paper_path, markdown_path, paper_output_dir
                 )
                 logger.info(f"[{paper_id}] Found {len(result['tables'])} tables")
+
+                # Step 3.5: Augment tables with semantic context (if enabled)
+                if self.enable_augmentation and result["tables"]:
+                    logger.info(
+                        f"[{paper_id}] Step 3.5: Augmenting tables with semantic context"
+                    )
+                    result["tables"] = await self._augment_tables(
+                        result["tables"], paper_path, paper_output_dir
+                    )
+                    logger.info(
+                        f"[{paper_id}] Table augmentation complete "
+                        f"(avg confidence: {self._calculate_avg_augmentation_confidence(result['tables']):.2f})"
+                    )
 
             # Step 4: Extract figures
             if extract_figures:
@@ -506,9 +541,12 @@ class ContentExtractor:
                 structure["caption"] = caption
 
                 # Extract page number
-                if hasattr(table, "prov") and table.prov:
-                    if hasattr(table.prov[0], "page_no"):
-                        structure["page"] = table.prov[0].page_no
+                if (
+                    hasattr(table, "prov")
+                    and table.prov
+                    and hasattr(table.prov[0], "page_no")
+                ):
+                    structure["page"] = table.prov[0].page_no
 
                 # Classify table type
                 table_type = self._classify_table(structure)
@@ -867,6 +905,145 @@ class ContentExtractor:
             "processing_time_seconds": round(processing_time, 2),
         }
 
+    # ========================================================================
+    # SEMANTIC AUGMENTATION METHODS
+    # ========================================================================
+
+    def _initialize_augmentation(self):
+        """Initialize semantic augmentation components."""
+        try:
+            from augmentation_config import AugmentationConfig
+            from semantic_validator import SemanticValidator
+            from table_augmenter import TableAugmenter
+
+            # Create shared config
+            config = AugmentationConfig()
+
+            # Initialize augmenter and validator
+            self.table_augmenter = TableAugmenter(config=config)
+            self.semantic_validator = SemanticValidator(
+                config=config, search_pipeline=self.table_augmenter.search
+            )
+
+            logger.info("Semantic augmentation components initialized successfully")
+
+        except ImportError as e:
+            logger.error(
+                f"Failed to import augmentation modules: {e}. "
+                "Make sure augmentation dependencies are installed."
+            )
+            raise
+        except Exception as e:
+            logger.error(f"Failed to initialize augmentation: {e}")
+            raise
+
+    async def _augment_tables(
+        self, tables: list[dict], pdf_path: Path, output_dir: Path
+    ) -> list[dict]:
+        """Augment extracted tables with semantic context.
+
+        Args:
+            tables: List of extracted table dictionaries
+            pdf_path: Path to source PDF
+            output_dir: Output directory for augmented data
+
+        Returns:
+            List of tables with added semantic context fields
+
+        """
+        if not self.table_augmenter:
+            logger.warning("Table augmenter not initialized, skipping augmentation")
+            return tables
+
+        # Process PDF for semantic search (once per document)
+        await self.table_augmenter.process_document(str(pdf_path))
+
+        augmented_tables = []
+
+        for table in tables:
+            try:
+                table_id = table["table_id"]
+                table_type = table.get("type", "other")
+
+                logger.debug(f"Augmenting {table_id} (type={table_type})")
+
+                # Choose appropriate augmentation method based on table type
+                if table_type == "regression":
+                    context = await self.table_augmenter.augment_regression_table(
+                        table, table_id, str(pdf_path)
+                    )
+                elif table_type == "summary" or table_type == "descriptive":
+                    context = await self.table_augmenter.augment_summary_stats_table(
+                        table, table_id, str(pdf_path)
+                    )
+                elif table_type == "balance":
+                    context = await self.table_augmenter.augment_balance_table(
+                        table, table_id, str(pdf_path)
+                    )
+                else:
+                    # For other table types, try regression augmentation as fallback
+                    logger.debug(
+                        f"{table_id}: Unknown type '{table_type}', using regression augmentation"
+                    )
+                    context = await self.table_augmenter.augment_regression_table(
+                        table, table_id, str(pdf_path)
+                    )
+
+                # Convert Pydantic model to dict and add to table
+                context_dict = context.model_dump(exclude_none=True)
+                table["semantic_context"] = context_dict
+
+                # Optionally validate table values
+                if self.semantic_validator and table_type == "regression":
+                    validation_summary = (
+                        await self.semantic_validator.validate_table_summary(
+                            table, table_id
+                        )
+                    )
+                    table["validation_summary"] = validation_summary
+
+                # Save augmented table
+                augmented_table_path = (
+                    output_dir / "tables" / f"{table_id}_augmented.json"
+                )
+                with augmented_table_path.open("w") as f:
+                    json.dump(table, f, indent=2)
+
+                augmented_tables.append(table)
+
+                logger.debug(
+                    f"{table_id} augmented: confidence={context.overall_confidence:.2f}"
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to augment table {table.get('table_id', 'unknown')}: {e}",
+                    exc_info=True,
+                )
+                # Keep table without augmentation
+                augmented_tables.append(table)
+
+        return augmented_tables
+
+    def _calculate_avg_augmentation_confidence(self, tables: list[dict]) -> float:
+        """Calculate average augmentation confidence across all tables.
+
+        Args:
+            tables: List of tables with optional semantic_context
+
+        Returns:
+            Average confidence score (0-1)
+
+        """
+        confidences = [
+            table["semantic_context"]["overall_confidence"]
+            for table in tables
+            if "semantic_context" in table
+            and "overall_confidence" in table["semantic_context"]
+        ]
+
+        return sum(confidences) / len(confidences) if confidences else 0.0
+
 
 # ============================================================================
 # CLI INTERFACE
@@ -899,6 +1076,11 @@ async def main():
     single_parser.add_argument(
         "--no-citations", action="store_true", help="Skip citation extraction"
     )
+    single_parser.add_argument(
+        "--augment",
+        action="store_true",
+        help="Enable semantic augmentation of tables (adds context, validation)",
+    )
 
     # Batch extraction
     batch_parser = subparsers.add_parser("batch", help="Extract from multiple papers")
@@ -912,6 +1094,11 @@ async def main():
     batch_parser.add_argument(
         "--workers", type=int, default=4, help="Number of parallel workers"
     )
+    batch_parser.add_argument(
+        "--augment",
+        action="store_true",
+        help="Enable semantic augmentation of tables (adds context, validation)",
+    )
 
     args = parser.parse_args()
 
@@ -919,7 +1106,11 @@ async def main():
         parser.print_help()
         return
 
-    extractor = ContentExtractor(output_dir=args.output_dir)
+    # Initialize extractor with augmentation flag
+    enable_augmentation = getattr(args, "augment", False)
+    extractor = ContentExtractor(
+        output_dir=args.output_dir, enable_augmentation=enable_augmentation
+    )
 
     if args.command == "single":
         # Single paper extraction

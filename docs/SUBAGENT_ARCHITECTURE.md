@@ -1,8 +1,8 @@
 # Subagent Architecture for Research Paper Analysis
 
-**Version:** 1.3
+**Version:** 1.4
 **Date:** 2025-11-06
-**Status:** Implementation Phase (5/8 phases complete)
+**Status:** Implementation Phase (6/8 phases complete)
 
 ## Overview
 
@@ -914,8 +914,8 @@ class ResearchOrchestrator:
 
 - **Purpose:** Enhance content-extractor with semantic search-based validation and context augmentation
 - **Approach:** Multi-pronged extraction combining structural (docling) + semantic (RAG) methods
-- **Status:** 5/8 phases completed (Phases 1-4 & 7 complete)
-- **Progress:** Core augmentation pipeline + validation complete, ready for integration
+- **Status:** 6/8 phases completed (Phases 1-5 & 7 complete)
+- **Progress:** Core augmentation pipeline + validation integrated into content-extractor
 
 **Architecture Overview:**
 
@@ -1062,14 +1062,36 @@ class ResearchOrchestrator:
 - **Dependencies Removed:**
   - `marker-pdf` - Replaced by docling (already a dependency)
 
+✅ **Phase 5: Integration into Content-Extractor (COMPLETE)**
+
+- **Files Modified:**
+  - `.claude/subagents/content-extractor/extractor.py` - Added semantic augmentation integration
+
+- **Key Features:**
+  - Optional augmentation via `--augment` CLI flag
+  - Lazy initialization of augmentation components
+  - Automatic table type detection and appropriate augmentation method selection
+  - Per-table validation for regression tables
+  - Augmented tables saved with `_augmented.json` suffix
+  - Average confidence reporting
+
+- **Integration Design:**
+  - Runs after structural table extraction (Step 3.5)
+  - Shares semantic search pipeline across all tables in a document
+  - Graceful fallback if augmentation fails (keeps original table)
+  - CLI support for both single and batch processing
+
+- **Usage Examples:**
+
+  ```bash
+  # Single paper with augmentation
+  uv run python extractor.py single paper.pdf --augment
+
+  # Batch processing with augmentation
+  uv run python extractor.py batch catalog.json --augment --parallel
+  ```
+
 **Remaining Phases:**
-
-📋 **Phase 5: Integration into Content-Extractor (PENDING)**
-
-- Update `.claude/subagents/content-extractor/extractor.py`
-- Add augmentation workflow to extraction pipeline
-- Enable/disable augmentation via config flag
-- Integrate validation feedback loop
 
 📋 **Phase 6: Update parse.py Models (PENDING)**
 
@@ -1117,7 +1139,7 @@ class ResearchOrchestrator:
 1. ✅ ~~Complete Phase 3: Implement `table_augmenter.py` orchestrator~~
 2. ✅ ~~Complete Phase 4: Implement `semantic_validator.py`~~
 3. ✅ ~~Update pyproject.toml dependencies~~
-4. 🔄 Phase 5: Integrate into content-extractor workflow
+4. ✅ ~~Phase 5: Integrate into content-extractor workflow~~
 5. 🔄 Phase 6: Update parse.py models with context fields
 6. 🔄 Phase 8: Test with real papers and validate improvements
 
@@ -1145,7 +1167,8 @@ class ResearchOrchestrator:
 
 **Changelog:**
 
-- **v1.3 (2025-11-06):** Added Phase 4 (semantic validator) and Phase 7 (dependencies). 5/8 phases now complete.
+- **v1.4 (2025-11-06):** Added Phase 5 (content-extractor integration). 6/8 phases now complete.
+- **v1.3 (2025-11-06):** Added Phase 4 (semantic validator) and Phase 7 (dependencies). 5/8 phases complete.
 
 ---
 
