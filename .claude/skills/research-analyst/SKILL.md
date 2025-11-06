@@ -45,13 +45,13 @@ This skill follows a comprehensive framework for documenting research papers:
 
 ### Step 1: Initial Document Processing
 
-When provided with a research paper (PDF converted to markdown via marker or docling):
+When provided with a research paper (PDF converted to markdown via docling):
 
 ```markdown
 # Initial Assessment
 
 **Document received**: [filename]
-**Conversion method**: [marker/docling]
+**Conversion method**: docling
 **Initial scan**: [page count, sections identified]
 **Paper type**: [RCT/Observational/Review/Meta-analysis]
 ```
@@ -710,14 +710,11 @@ Create cross-references between related papers:
 
 ## Integration with Other Skills
 
-### Using with Marker/Docling Skills
+### Using with Docling Skill
 
 ```bash
 # Convert PDF to markdown first
-marker_single paper.pdf --output_dir output/
-
-# Or with docling
-docling convert paper.pdf
+uv run docling paper.pdf
 
 # Then analyze with this skill
 # Claude will systematically extract information

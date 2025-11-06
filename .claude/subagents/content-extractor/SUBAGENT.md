@@ -79,7 +79,7 @@ This subagent leverages:
 - **table-validator** - Validate extraction quality
 - **bibliography** - Citation extraction and management
 
-**Note**: This subagent uses **docling** directly via Python API (not marker subprocess) for better stability, memory management, and reliability.
+**Note**: This subagent uses **docling** directly via Python API for better stability, memory management, and reliability.
 
 ## Input Specification
 
@@ -837,8 +837,8 @@ Calculated as weighted average:
 ### Common Errors
 
 1. **PDF Conversion Failed**
-   - Retry with alternative tool (marker → docling)
    - Try OCR if scanned document
+   - Check PDF integrity and format
 
 2. **Table Classification Uncertain**
    - Flag for manual classification
@@ -862,7 +862,7 @@ Calculated as weighted average:
 - Use parallel processing for batches
 - Cache converted markdown files
 - Skip already-extracted papers
-- Use marker (fast) by default
+- Enable semantic augmentation with --augment flag for richer context
 
 ## Next Steps
 

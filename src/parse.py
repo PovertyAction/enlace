@@ -38,6 +38,14 @@ class RegressionCoefficient(BaseModel):
         None, description="Significance stars (*, **, ***)"
     )
 
+    # Semantic augmentation fields (optional)
+    variable_context: dict[str, Any] | None = Field(
+        None, description="Semantic context for this variable (from RAG augmentation)"
+    )
+    validation: dict[str, Any] | None = Field(
+        None, description="Validation result comparing parsed vs RAG-extracted value"
+    )
+
     @field_validator(
         "coefficient",
         "std_error",
@@ -91,6 +99,14 @@ class RegressionModel(BaseModel):
         default_factory=list, description="List of fixed effects included"
     )
 
+    # Semantic augmentation fields (optional)
+    methods_context: dict[str, Any] | None = Field(
+        None, description="Statistical methods context (from RAG augmentation)"
+    )
+    outcome_context: dict[str, Any] | None = Field(
+        None, description="Outcome measurement context (from RAG augmentation)"
+    )
+
 
 class RegressionTable(BaseModel):
     """Complete regression table with multiple specifications."""
@@ -105,6 +121,18 @@ class RegressionTable(BaseModel):
     page_number: int | None = None
     table_index: int | None = None
     context_before: str | None = Field(None, description="Text appearing before table")
+
+    # Semantic augmentation fields (optional)
+    study_context: dict[str, Any] | None = Field(
+        None, description="Study design and sample context (from RAG augmentation)"
+    )
+    treatment_contexts: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Treatment/control arm descriptions (from RAG augmentation)",
+    )
+    augmentation_confidence: float | None = Field(
+        None, description="Overall confidence score for semantic augmentation (0-1)"
+    )
 
 
 class SummaryStatistic(BaseModel):
@@ -141,6 +169,11 @@ class SummaryStatistic(BaseModel):
     # Additional statistics
     skewness: float | None = Field(None, description="Skewness")
     kurtosis: float | None = Field(None, description="Kurtosis")
+
+    # Semantic augmentation fields (optional)
+    variable_context: dict[str, Any] | None = Field(
+        None, description="Semantic context for this variable (from RAG augmentation)"
+    )
 
     @field_validator("n_obs", "n_missing", mode="before")
     @classmethod
@@ -204,6 +237,18 @@ class SummaryStatisticsTable(BaseModel):
     table_index: int | None = None
     context_before: str | None = Field(None, description="Text appearing before table")
 
+    # Semantic augmentation fields (optional)
+    study_context: dict[str, Any] | None = Field(
+        None, description="Study design and sample context (from RAG augmentation)"
+    )
+    treatment_contexts: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Treatment/control arm descriptions (from RAG augmentation)",
+    )
+    augmentation_confidence: float | None = Field(
+        None, description="Overall confidence score for semantic augmentation (0-1)"
+    )
+
 
 class BalanceStatistic(BaseModel):
     """Model for balance table comparison between groups."""
@@ -240,6 +285,11 @@ class BalanceStatistic(BaseModel):
     significance: str | None = Field(None, description="Significance stars")
     normalized_difference: float | None = Field(
         None, description="Normalized/standardized difference"
+    )
+
+    # Semantic augmentation fields (optional)
+    variable_context: dict[str, Any] | None = Field(
+        None, description="Semantic context for this variable (from RAG augmentation)"
     )
 
     @field_validator("control_n", "treatment_n", "group3_n", mode="before")
@@ -315,6 +365,18 @@ class BalanceTable(BaseModel):
     page_number: int | None = None
     table_index: int | None = None
     context_before: str | None = Field(None, description="Text appearing before table")
+
+    # Semantic augmentation fields (optional)
+    study_context: dict[str, Any] | None = Field(
+        None, description="Study design and sample context (from RAG augmentation)"
+    )
+    treatment_contexts: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Treatment/control arm descriptions (from RAG augmentation)",
+    )
+    augmentation_confidence: float | None = Field(
+        None, description="Overall confidence score for semantic augmentation (0-1)"
+    )
 
 
 # ============================================================================

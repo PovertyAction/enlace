@@ -47,16 +47,13 @@ Located in `references/`:
 
 ## Quick Start
 
-### Using with Marker or Docling
+### Using with Docling
 
 First, convert your PDF to markdown:
 
 ```bash
-# Using marker
-marker_single paper.pdf --output_dir output/
-
-# Or using docling
-docling convert paper.pdf
+# Using docling
+uv run docling paper.pdf
 ```
 
 Then extract information using this skill:
@@ -139,7 +136,7 @@ Supports:
 ### Individual Paper Extraction
 
 ```text
-1. Convert PDF → Markdown (marker/docling)
+1. Convert PDF → Markdown (docling)
    ↓
 2. Initialize extraction (extract_paper.py)
    ↓
@@ -198,13 +195,13 @@ Examples:
 
 ## Integration with Other Skills
 
-### With Marker/Docling Skills
+### With Docling Skill
 
 Convert PDFs to markdown before extraction:
 
 ```bash
 # High-quality conversion
-marker_single paper.pdf --output_dir papers/
+uv run docling paper.pdf
 
 # Then extract
 python scripts/extract_paper.py --paper papers/paper.md
@@ -427,7 +424,7 @@ To improve this skill:
 
 ```bash
 # 1. Convert paper to markdown
-marker_single dupas2023_health.pdf --output_dir papers/
+uv run docling dupas2023_health.pdf
 
 # 2. Initialize extraction
 python scripts/extract_paper.py \

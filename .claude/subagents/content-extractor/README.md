@@ -94,7 +94,7 @@ Each extraction receives a quality score (0-1):
 
 ## Dependencies
 
-- pdf-processor skill (marker/docling)
+- pdf-processor skill (docling)
 - table-validator skill
 - bibliography skill
 - research-analyst skill

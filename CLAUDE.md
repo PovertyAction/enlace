@@ -197,7 +197,6 @@ Always run `just pre-commit-run` before committing, or install hooks with `uv ru
 - **pydantic** - Data validation and structured models
 - **pandas** - Data manipulation and export
 - **duckdb** - Data processing and file format conversion
-- **marker-pdf** - Alternative PDF processing
 - **altair** - Data visualization (for analysis notebooks)
 - **pyfixest**, **nbstata** - Statistical analysis tools (for Jupyter notebooks)
 

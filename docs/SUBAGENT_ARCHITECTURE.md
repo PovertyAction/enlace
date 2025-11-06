@@ -1,8 +1,8 @@
 # Subagent Architecture for Research Paper Analysis
 
-**Version:** 1.4
+**Version:** 1.5
 **Date:** 2025-11-06
-**Status:** Implementation Phase (6/8 phases complete)
+**Status:** Implementation Phase (7/8 phases complete)
 
 ## Overview
 
@@ -914,8 +914,8 @@ class ResearchOrchestrator:
 
 - **Purpose:** Enhance content-extractor with semantic search-based validation and context augmentation
 - **Approach:** Multi-pronged extraction combining structural (docling) + semantic (RAG) methods
-- **Status:** 6/8 phases completed (Phases 1-5 & 7 complete)
-- **Progress:** Core augmentation pipeline + validation integrated into content-extractor
+- **Status:** 7/8 phases completed (Phases 1-7 complete)
+- **Progress:** Full implementation complete, ready for testing
 
 **Architecture Overview:**
 
@@ -1059,9 +1059,6 @@ class ResearchOrchestrator:
   - `pypdf>=5.5.0` - PDF text extraction
   - `sentence-transformers>=3.4.0` - Embedding models
 
-- **Dependencies Removed:**
-  - `marker-pdf` - Replaced by docling (already a dependency)
-
 ✅ **Phase 5: Integration into Content-Extractor (COMPLETE)**
 
 - **Files Modified:**
@@ -1091,15 +1088,38 @@ class ResearchOrchestrator:
   uv run python extractor.py batch catalog.json --augment --parallel
   ```
 
+✅ **Phase 6: Update parse.py Models (COMPLETE)**
+
+- **Files Modified:**
+  - `src/parse.py` - Added semantic context fields to all table models
+
+- **Model Updates:**
+  - **RegressionCoefficient:**
+    - Added `variable_context` (dict) - Semantic context from RAG
+    - Added `validation` (dict) - Validation result vs RAG extraction
+  - **RegressionModel:**
+    - Added `methods_context` (dict) - Statistical methods context
+    - Added `outcome_context` (dict) - Outcome measurement context
+  - **RegressionTable:**
+    - Added `study_context` (dict) - Study design and sample context
+    - Added `treatment_contexts` (list) - Treatment arm descriptions
+    - Added `augmentation_confidence` (float) - Overall confidence score
+  - **SummaryStatistic:**
+    - Added `variable_context` (dict) - Variable semantic context
+  - **SummaryStatisticsTable:**
+    - Added `study_context`, `treatment_contexts`, `augmentation_confidence`
+  - **BalanceStatistic:**
+    - Added `variable_context` (dict) - Variable semantic context
+  - **BalanceTable:**
+    - Added `study_context`, `treatment_contexts`, `augmentation_confidence`
+
+- **Design Principles:**
+  - All augmentation fields are optional (won't break existing code)
+  - Uses `dict[str, Any]` for flexibility (Pydantic models serialized to dicts)
+  - Consistent field naming across all table types
+  - Backward compatible with existing extraction code
+
 **Remaining Phases:**
-
-📋 **Phase 6: Update parse.py Models (PENDING)**
-
-- Add context fields to existing Pydantic models:
-  - `RegressionCoefficient`: Add `variable_context`, `validation` fields
-  - `RegressionModel`: Add `methods_context` field
-  - `RegressionTable`: Add `study_context`, `treatment_contexts`, `variable_contexts`
-  - Similar updates for `SummaryStatisticsTable` and `BalanceTable`
 
 📋 **Phase 8: Testing and Refinement (PENDING)**
 
@@ -1140,8 +1160,8 @@ class ResearchOrchestrator:
 2. ✅ ~~Complete Phase 4: Implement `semantic_validator.py`~~
 3. ✅ ~~Update pyproject.toml dependencies~~
 4. ✅ ~~Phase 5: Integrate into content-extractor workflow~~
-5. 🔄 Phase 6: Update parse.py models with context fields
-6. 🔄 Phase 8: Test with real papers and validate improvements
+5. ✅ ~~Phase 6: Update parse.py models with context fields~~
+6. 🔄 **Phase 8: Test with real papers and validate improvements** (CURRENT)
 
 **Files Summary:**
 
@@ -1167,6 +1187,7 @@ class ResearchOrchestrator:
 
 **Changelog:**
 
+- **v1.5 (2025-11-06):** Added Phase 6 (parse.py model updates). 7/8 phases now complete.
 - **v1.4 (2025-11-06):** Added Phase 5 (content-extractor integration). 6/8 phases now complete.
 - **v1.3 (2025-11-06):** Added Phase 4 (semantic validator) and Phase 7 (dependencies). 5/8 phases complete.
 
@@ -1373,7 +1394,7 @@ All subagents log to structured format:
 1. **Parallel Processing:** Extract from multiple papers simultaneously
 2. **Caching:** Cache extraction results, skill outputs
 3. **Incremental Processing:** Process new papers only
-4. **Smart Routing:** Use marker (fast) unless docling (VLM) needed
+4. **Smart Routing:** Use docling for reliable PDF processing with VLM support
 
 ## Security & Privacy
 

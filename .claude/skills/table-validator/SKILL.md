@@ -23,18 +23,18 @@ Use this skill when you need to:
 ### Step 1: Extract Table from PDF
 
 ```python
-# Using pdf-processor
-from marker.converters.pdf import PdfConverter
-from marker.models import create_model_dict
-from marker.schema import BlockTypes
+# Using pdf-processor (docling)
+from docling.document_converter import DocumentConverter
 
-converter = PdfConverter(artifact_dict=create_model_dict())
-document = converter.build_document("paper.pdf")
-tables = document.contained_blocks((BlockTypes.Table,))
+converter = DocumentConverter()
+result = converter.convert("paper.pdf")
 
 # Save first table
-with open("extracted_table.html", "w") as f:
-    f.write(tables[0].html)
+if result.document.tables:
+    first_table = result.document.tables[0]
+    table_html = first_table.export_to_html()
+    with open("extracted_table.html", "w") as f:
+        f.write(table_html)
 ```
 
 ### Step 2: Visual Comparison
@@ -52,7 +52,9 @@ print("Extracted Table:")
 display(HTML(table_html))
 
 print("\nSource PDF (check manually)")
-print(f"Page: {tables[0].page_id}")
+# Note: Page information available from table metadata if needed
+if result.document.tables:
+    print(f"Table found in document")
 ```
 
 ### Step 3: Statistical Validation
@@ -223,7 +225,6 @@ research-analyst / pyfixest
 2. **Check manually for first few papers** - Build confidence in extraction
 3. **Set up automated checks** - Run validation in pipeline
 4. **Document validation failures** - Track which papers need manual review
-5. **Use multiple extraction tools** - Compare marker vs docling for accuracy
 
 ## See Also
 
