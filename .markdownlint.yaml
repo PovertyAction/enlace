@@ -2,6 +2,10 @@
 
 # default to true for all rules
 default: true
+customRules:
+  - "./styles/quarto/custom-quarto-rules.js"
+  - "./styles/quarto/additional-quarto-rules.js"
+  - "./styles/quarto/quarto-image-rules.js"
 
 # MD007/unordered-list-indent
 MD007:
@@ -21,4 +25,17 @@ MD024:
   # Allow when nested under different parents e.g. CHANGELOG.md
   siblings_only: true
 
+# MD025/single-title/single-h1
+# Disabled for Quarto templates which use multiple H1s for sections
+MD025: false
+
+# MD028/no-blanks-blockquote
+# Disabled to allow blank lines in blockquotes
+MD028: false
+
+# MD029/ol-prefix - Ordered list item prefix
+# Disabled for PDF extractions which often have inconsistent list numbering
+MD029: false
+
 MD038: false
+MD036: false

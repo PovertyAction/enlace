@@ -1,6 +1,26 @@
-# Python project template
+# enlace
 
-Template repository for a python project.
+Tools for parsing research papers and connecting to underlying microdata for data
+harmonizations and meta-analysis
+
+## Overview
+
+The purpose of this repository is to provide tools and documentation to help
+researchers working in development economics to more easily parse research papers,
+extract relevant information, and connect to underlying microdata for data
+harmonization and meta-analysis. The repository includes code for automating the
+extraction of study characteristics, outcome measures, and statistical results from
+research papers, as well as tools for linking these extracted data to existing
+datasets and harmonizing variables across studies.
+
+## Components
+
+- **Paper Parsing**: Scripts and models for extracting structured data from research
+  papers in PDF or DOCX/DOC format.
+- **Microdata Linking**: Tools for connecting extracted study information to
+  underlying microdata sources.
+- **Data Harmonization**: Functions for standardizing variables and outcomes across.
+  studies to facilitate meta-analysis.
 
 ## Development set up
 
@@ -20,15 +40,13 @@ following from the command line:
 
 | Platform  | Commands                                                            |
 | --------- | ------------------------------------------------------------------- |
-| Windows   | `winget install Git.Git Casey.Just astral-sh.uv GitHub.cli Posit.Quarto` |
+| Windows   | `winget install Git.Git Casey.Just astral-sh.uv GitHub.cli` |
 | Mac/Linux | `brew install just uv gh`                                          |
 
 This will make sure that you have the latest version of `Just`, as well as
-[uv](https://docs.astral.sh/uv/) (installer for Python) and
-[Quarto](https://quarto.org/docs/guide/) (for writing and compiling scientific and
-technical documents).
+[uv](https://docs.astral.sh/uv/) (installer for Python).
 
-- We use `Just` in order to make it easier for all IPA users to be productive with data
+- We use `Just` in order to make it easier for all users to be productive with data
   and technology systems. The goal of using a `Justfile` is to help make the end goal of
   the user easier to achieve without needing to know or remember all of the technical
   details of how we get to that goal.

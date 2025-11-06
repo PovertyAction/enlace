@@ -9,6 +9,8 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 venv_dir := ".venv"
 python := venv_dir + if os_family() == "windows" { "/Scripts/python.exe" } else { "/bin/python3" }
 
+QUARTO_VERSION := "1.7.32"
+
 # Display system information
 system-info:
     @echo "CPU architecture: {{ arch() }}"
@@ -20,7 +22,7 @@ clean:
     rm -rf .venv
 
 # Setup environment
-get-started: pre-install venv
+get-started: pre-install venv install-readstat
 
 # Update project software versions in requirements
 update-reqs:
@@ -40,16 +42,33 @@ activate-venv:
 lab:
     uv run jupyter lab
 
-# Preview the quarto project
-preview-docs:
-    quarto preview
+# Install the read_stat extension (run once)
+install-readstat:
+    duckdb -c "INSTALL read_stat FROM community"
 
-# Build the quarto project
-build-docs:
-    quarto render
+# Convert a Stata/SAS/SPSS file to CSV
+convert input output:
+    duckdb -c "LOAD read_stat; COPY (FROM read_stat('{{input}}')) TO '{{output}}'"
+
+# Convert using replacement scan (shorter, works after extension is installed)
+convert-csv input output:
+    duckdb -c "COPY (FROM '{{input}}') TO '{{output}}'"
+
+# Convert and preview first 10 rows
+preview-csv input:
+    duckdb -c "LOAD read_stat; FROM read_stat('{{input}}') LIMIT 10" -markdown
+
+# # Batch convert all .dta files in a directory to CSV
+# convert-all pattern="*.dta":
+#     #!/usr/bin/env bash
+#     for file in {{pattern}}; do
+#         output="${file%.*}.csv"
+#         duckdb -c "COPY (FROM '$file') TO '$output'"
+#         echo "Converted: $file -> $output"
+#     done
 
 # Lint python code
-lint-py:
+lint-python:
     uv run ruff check
 
 # Format python code
@@ -66,17 +85,17 @@ lint-sql:
 
 # Format all markdown and config files
 fmt-markdown:
-    uv run mdformat .
+    markdownlint-cli2 --config .markdownlint.yaml "**/*.qmd" "**/*.md" "#.venv" "#_archive" --fix
 
 # Format a single markdown file, "f"
 fmt-md f:
-    uv run mdformat {{ f }}
+    markdownlint-cli2 --config .markdownlint.yaml {{ f }} --fix
 
 # Check format of all markdown files
 fmt-check-markdown:
-    uv run mdformat --check .
+    markdownlint-cli2 --config .markdownlint.yaml "**/*.qmd" "**/*.md" "#.venv" "#_archive"
 
-fmt-all: lint-py fmt-python lint-sql fmt-markdown
+fmt-all: fmt-python lint-python lint-sql fmt-markdown
 
 # Run pre-commit hooks
 pre-commit-run:
@@ -84,14 +103,18 @@ pre-commit-run:
 
 [windows]
 pre-install:
-    winget install Casey.Just astral-sh.uv GitHub.cli Posit.Quarto OpenJS.NodeJS
-    npm install -g markdownlint-cli
+    winget install Casey.Just astral-sh.uv prefix-dev.pixi GitHub.cli
+    winget install BurntSushi.ripgrep.GNU eza-community.eza DuckDB.cli
+    winget install Posit.Quarto
+    winget install OpenJS.NodeJS
+    npm install -g markdownlint-cli2
+    pixi global install xan
 
 [linux]
 pre-install:
-    brew install just uv gh markdownlint-cli
+    brew install just uv gh markdownlint-cli2 ripgrep eza duckdb xan jq
 
 [macos]
 pre-install:
-    brew install just uv gh markdownlint-cli
+    brew install just uv gh markdownlint-cli2 ripgrep eza duckdb xan jq
     brew install --cask quarto
