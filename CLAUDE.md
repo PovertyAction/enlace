@@ -144,18 +144,39 @@ python src/parse.py paper.pdf --ocr
 - Pydantic models for structured data
 - Docstrings use Google-style format
 
+### Automated Code Quality (IMPORTANT)
+
+**Claude Code MUST automatically format and lint Python code after writing or modifying files.**
+
+Use the **py-format-lint** subagent or the **ruff** skill after ANY Python code changes:
+
+```bash
+# Use project's just commands
+just fmt-python    # Format all Python code
+just lint-python   # Lint and auto-fix issues
+```
+
+Or invoke the py-format-lint subagent to do both automatically.
+
 ### Linting Configuration (Ruff)
 
 Selected rule sets:
 
-- F (Pyflakes)
-- E/W (pycodestyle)
-- I (isort)
-- D (flake8-docstrings)
-- UP (pyupgrade)
-- SIM (flake8-simplify)
+- F (Pyflakes) - Errors, undefined names, unused imports
+- E/W (pycodestyle) - PEP 8 violations
+- I (isort) - Import sorting
+- D (flake8-docstrings) - Docstring validation
+- UP (pyupgrade) - Python syntax modernization
+- SIM (flake8-simplify) - Code simplification
 
 Note: Some docstring rules are disabled (D105, D100, D104, D203, D213) - check `pyproject.toml` for full list.
+
+**Common linting issues and fixes:**
+
+- **D400/D415**: Docstrings must end with period (`.`)
+- **D401**: Use imperative mood ("Validate data" not "Validates data")
+- **D103**: Add docstrings to public functions
+- **F841**: Remove or use unused variables
 
 ### Pre-commit Hooks
 
@@ -190,12 +211,18 @@ Always run `just pre-commit-run` before committing, or install hooks with `uv ru
 
 ## Development Workflow
 
-1. Make changes to Python code in `src/`
-2. Run `just lint-py` to check for issues
-3. Run `just fmt-python` to auto-format code
+**IMPORTANT: Claude Code must follow this workflow when writing Python code:**
+
+1. Write or modify Python code in `src/` or skill/subagent scripts
+2. **AUTOMATICALLY run formatting and linting** using one of:
+   - The **py-format-lint** subagent (recommended - does both)
+   - Or run `just fmt-python` and `just lint-python` directly
+3. Fix any remaining linting issues that can't be auto-fixed
 4. Run `just pre-commit-run` to validate all checks pass
-5. Test paper extraction: `python src/parse.py path/to/paper.pdf`
+5. Test the changes (e.g., `python src/parse.py path/to/paper.pdf`)
 6. Commit changes (pre-commit hooks will run automatically)
+
+**Key point**: Step 2 (formatting and linting) is NOT optional - it must happen after every Python code change.
 
 ## Notes
 
