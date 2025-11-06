@@ -1,8 +1,8 @@
 # Subagent Architecture for Research Paper Analysis
 
-**Version:** 1.0
-**Date:** 2025-11-05
-**Status:** Design Phase
+**Version:** 1.3
+**Date:** 2025-11-06
+**Status:** Implementation Phase (5/8 phases complete)
 
 ## Overview
 
@@ -1079,13 +1079,6 @@ class ResearchOrchestrator:
   - `RegressionTable`: Add `study_context`, `treatment_contexts`, `variable_contexts`
   - Similar updates for `SummaryStatisticsTable` and `BalanceTable`
 
-📋 **Phase 7: Update Dependencies (PENDING)**
-
-- Update `pyproject.toml` with new dependencies:
-  - `langchain`, `langchain-anthropic`, `langchain-chroma`, `langchain-huggingface`
-  - `chromadb`
-  - `sentence-transformers` (or `model2vec` for lightweight alternative)
-
 📋 **Phase 8: Testing and Refinement (PENDING)**
 
 - Unit tests for each extractor
@@ -1121,11 +1114,12 @@ class ResearchOrchestrator:
 
 **Next Immediate Steps:**
 
-1. Complete Phase 3: Implement `table_augmenter.py` orchestrator
-2. Complete Phase 4: Implement `semantic_validator.py`
-3. Integrate into content-extractor workflow
-4. Update pyproject.toml dependencies
-5. Test with real papers and validate improvements
+1. ✅ ~~Complete Phase 3: Implement `table_augmenter.py` orchestrator~~
+2. ✅ ~~Complete Phase 4: Implement `semantic_validator.py`~~
+3. ✅ ~~Update pyproject.toml dependencies~~
+4. 🔄 Phase 5: Integrate into content-extractor workflow
+5. 🔄 Phase 6: Update parse.py models with context fields
+6. 🔄 Phase 8: Test with real papers and validate improvements
 
 **Files Summary:**
 
@@ -1136,7 +1130,8 @@ class ResearchOrchestrator:
 | `src/context_models.py` | 296 | 8 Pydantic context models |
 | `src/context_extractors.py` | 583 | 5 specialized extractors |
 | `src/table_augmenter.py` | 504 | Main orchestration engine |
-| **Total** | **1,991** | **Complete augmentation system** |
+| `src/semantic_validator.py` | 463 | Cross-validation engine |
+| **Total** | **2,454** | **Complete augmentation + validation system** |
 
 **Documentation:**
 
@@ -1145,7 +1140,12 @@ class ResearchOrchestrator:
 - Data models: `src/context_models.py`
 - Extractors: `src/context_extractors.py`
 - Orchestrator: `src/table_augmenter.py`
+- Validator: `src/semantic_validator.py`
 - Architecture: This document
+
+**Changelog:**
+
+- **v1.3 (2025-11-06):** Added Phase 4 (semantic validator) and Phase 7 (dependencies). 5/8 phases now complete.
 
 ---
 
