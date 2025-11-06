@@ -914,8 +914,8 @@ class ResearchOrchestrator:
 
 - **Purpose:** Enhance content-extractor with semantic search-based validation and context augmentation
 - **Approach:** Multi-pronged extraction combining structural (docling) + semantic (RAG) methods
-- **Status:** 3/8 phases completed
-- **Progress:** Core augmentation pipeline complete, ready for validation and integration
+- **Status:** 5/8 phases completed (Phases 1-4 & 7 complete)
+- **Progress:** Core augmentation pipeline + validation complete, ready for integration
 
 **Architecture Overview:**
 
@@ -1012,14 +1012,57 @@ class ResearchOrchestrator:
   - Handles different table data structures from parse.py
   - Detailed logging for debugging and monitoring
 
+✅ **Phase 4: Semantic Validator (COMPLETE)**
+
+- **Files Created:**
+  - `src/semantic_validator.py` (463 lines) - Cross-validation engine
+
+- **Key Features:**
+  - Cross-validate parsed coefficients against paper text using RAG
+  - Validate summary statistics and sample sizes
+  - Batch validation for efficient processing
+  - Intelligent value extraction from text (handles scientific notation, decimals)
+  - Configurable tolerance thresholds (5% close match, 10% warning threshold)
+  - Confidence adjustment based on match quality
+
+- **Class: `SemanticValidator`**
+  - `validate_coefficient()` - Validate regression coefficients
+  - `validate_summary_statistic()` - Validate descriptive statistics
+  - `validate_sample_size()` - Validate sample size values
+  - `batch_validate_coefficients()` - Efficient batch processing
+  - `validate_table_summary()` - Generate validation report for entire table
+
+- **Validation Logic:**
+  - Exact match: relative difference ≤ 0.1%
+  - Close match: relative difference ≤ 5%
+  - Warning: relative difference > 10%
+  - Returns `ValidationResult` with match status, discrepancy metrics, confidence, source info
+
+- **Design Highlights:**
+  - Shared search pipeline for efficiency
+  - Smart numerical extraction with regex patterns
+  - Context-aware queries (includes table ID, variable name)
+  - Flags high-discrepancy issues automatically
+  - Source tracking (text excerpt, page number)
+
+✅ **Phase 7: Update Dependencies (COMPLETE)**
+
+- **Files Modified:**
+  - `pyproject.toml` - Added semantic augmentation dependencies
+
+- **Dependencies Added:**
+  - `chromadb>=0.5.23` - Vector database
+  - `langchain>=0.3.22` - LLM framework
+  - `langchain-anthropic>=0.3.9` - Anthropic integration
+  - `langchain-chroma>=0.2.2` - ChromaDB integration
+  - `langchain-huggingface>=0.1.4` - HuggingFace embeddings
+  - `pypdf>=5.5.0` - PDF text extraction
+  - `sentence-transformers>=3.4.0` - Embedding models
+
+- **Dependencies Removed:**
+  - `marker-pdf` - Replaced by docling (already a dependency)
+
 **Remaining Phases:**
-
-📋 **Phase 4: Semantic Validator (PENDING)**
-
-- Create `src/semantic_validator.py`
-- Cross-validate parsed numerical values using semantic search
-- Implement coefficient validation and table value verification
-- Generate ValidationResult objects with discrepancy analysis
 
 📋 **Phase 5: Integration into Content-Extractor (PENDING)**
 
