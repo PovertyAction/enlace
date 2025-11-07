@@ -334,7 +334,7 @@ class TableAugmenter:
 
         if doc_path not in self._study_context_cache:
             if self.config.augment_study_context:
-                study_context = await self.study_extractor.extract_context()
+                study_context = await self.study_extractor.extract_study_context()
                 self._study_context_cache[doc_path] = study_context
                 logger.debug(
                     f"Study context cached: confidence={study_context.confidence:.2f}"
