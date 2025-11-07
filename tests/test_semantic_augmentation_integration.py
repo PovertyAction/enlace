@@ -29,11 +29,9 @@ class TestSemanticAugmentationPipeline:
     ):
         """Test complete pipeline from document processing to validation."""
         # Setup LLM mock
-        mock_llm = MagicMock()
         mock_response = MagicMock()
         mock_response.content = "The treatment coefficient is 0.450 with SE 0.05"
-        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
-        mock_chat.return_value = mock_llm
+        mock_chain = AsyncMock(return_value=mock_response)
 
         # Setup embedding mock
         mock_embeddings_instance = MagicMock()
@@ -53,7 +51,6 @@ class TestSemanticAugmentationPipeline:
         # Initialize pipeline
         config = AugmentationConfig()
         search_pipeline = SemanticSearchPipeline(config=config)
-        search_pipeline.llm = mock_llm
 
         # Mock document processing
         mock_docs = [
@@ -70,7 +67,15 @@ class TestSemanticAugmentationPipeline:
                 search_pipeline, "_extract_text_from_pdf", return_value=mock_docs
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=mock_docs),
+            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
+            # Mock the chain creation for QA
+            mock_prompt_instance = MagicMock()
+            mock_prompt.from_messages.return_value = mock_prompt_instance
+            mock_prompt_instance.__or__ = MagicMock(
+                return_value=MagicMock(ainvoke=mock_chain)
+            )
+
             # Step 1: Process document
             await search_pipeline.process_document("test_paper.pdf")
 
@@ -120,26 +125,18 @@ class TestSemanticAugmentationPipeline:
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
         """Test pipeline with multiple tables from same document."""
-        # Setup mocks
-        mock_llm = MagicMock()
 
         # Different responses for different queries
-        async def mock_ainvoke(inputs):
+        async def mock_chain_invoke(inputs):
             question = inputs.get("question", "")
-            if "Table 1" in question or "baseline" in question.lower():
-                response = MagicMock()
-                response.content = "Table 1 baseline coefficient is 0.320"
-                return response
-            elif "Table 2" in question or "treatment" in question.lower():
-                response = MagicMock()
-                response.content = "Table 2 treatment coefficient is 0.450"
-                return response
             response = MagicMock()
-            response.content = "Information not found"
+            if "Table 1" in question or "baseline" in question.lower():
+                response.content = "Table 1 baseline coefficient is 0.320"
+            elif "Table 2" in question or "treatment" in question.lower():
+                response.content = "Table 2 treatment coefficient is 0.450"
+            else:
+                response.content = "Information not found"
             return response
-
-        mock_llm.ainvoke = mock_ainvoke
-        mock_chat.return_value = mock_llm
 
         # Setup vectorstore
         mock_vectorstore = MagicMock()
@@ -164,7 +161,6 @@ class TestSemanticAugmentationPipeline:
 
         # Initialize pipeline
         search_pipeline = SemanticSearchPipeline()
-        search_pipeline.llm = mock_llm
 
         mock_docs = [mock_doc1, mock_doc2]
 
@@ -173,7 +169,15 @@ class TestSemanticAugmentationPipeline:
                 search_pipeline, "_extract_text_from_pdf", return_value=mock_docs
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=mock_docs),
+            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
+            # Mock the chain creation
+            mock_prompt_instance = MagicMock()
+            mock_prompt.from_messages.return_value = mock_prompt_instance
+            mock_prompt_instance.__or__ = MagicMock(
+                return_value=MagicMock(ainvoke=mock_chain_invoke)
+            )
+
             await search_pipeline.process_document("paper.pdf")
 
             # Validate coefficients from different tables
@@ -203,11 +207,9 @@ class TestSemanticAugmentationPipeline:
     ):
         """Test that pipeline detects OCR/parsing errors."""
         # Setup LLM mock - correct value in paper
-        mock_llm = MagicMock()
         mock_response = MagicMock()
         mock_response.content = "The coefficient is 0.450"
-        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
-        mock_chat.return_value = mock_llm
+        mock_chain = AsyncMock(return_value=mock_response)
 
         # Setup vectorstore
         mock_vectorstore = MagicMock()
@@ -220,7 +222,6 @@ class TestSemanticAugmentationPipeline:
         mock_chroma.return_value = mock_vectorstore
 
         search_pipeline = SemanticSearchPipeline()
-        search_pipeline.llm = mock_llm
 
         mock_docs = [mock_doc]
 
@@ -229,7 +230,15 @@ class TestSemanticAugmentationPipeline:
                 search_pipeline, "_extract_text_from_pdf", return_value=mock_docs
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=mock_docs),
+            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
+            # Mock the chain creation
+            mock_prompt_instance = MagicMock()
+            mock_prompt.from_messages.return_value = mock_prompt_instance
+            mock_prompt_instance.__or__ = MagicMock(
+                return_value=MagicMock(ainvoke=mock_chain)
+            )
+
             await search_pipeline.process_document("paper.pdf")
 
             validator = SemanticValidator(search_pipeline=search_pipeline)
@@ -256,10 +265,9 @@ class TestSemanticAugmentationPipeline:
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
         """Test batch validation of multiple coefficients."""
-        mock_llm = MagicMock()
 
         # Mock responses for different variables
-        async def mock_ainvoke(inputs):
+        async def mock_chain_invoke(inputs):
             question = inputs.get("question", "")
             if "var1" in question:
                 response = MagicMock()
@@ -277,9 +285,6 @@ class TestSemanticAugmentationPipeline:
             response.content = "Not found"
             return response
 
-        mock_llm.ainvoke = mock_ainvoke
-        mock_chat.return_value = mock_llm
-
         # Setup vectorstore
         mock_vectorstore = MagicMock()
         mock_doc = Document(
@@ -292,14 +297,21 @@ class TestSemanticAugmentationPipeline:
         mock_chroma.return_value = mock_vectorstore
 
         search_pipeline = SemanticSearchPipeline()
-        search_pipeline.llm = mock_llm
 
         with (
             patch.object(
                 search_pipeline, "_extract_text_from_pdf", return_value=[mock_doc]
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=[mock_doc]),
+            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
+            # Mock the chain creation
+            mock_prompt_instance = MagicMock()
+            mock_prompt.from_messages.return_value = mock_prompt_instance
+            mock_prompt_instance.__or__ = MagicMock(
+                return_value=MagicMock(ainvoke=mock_chain_invoke)
+            )
+
             await search_pipeline.process_document("paper.pdf")
 
             validator = SemanticValidator(search_pipeline=search_pipeline)
@@ -328,15 +340,11 @@ class TestSemanticAugmentationPipeline:
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
         """Test generating validation summary for entire table."""
-        mock_llm = MagicMock()
 
-        async def mock_ainvoke(inputs):
+        async def mock_chain_invoke(inputs):
             response = MagicMock()
             response.content = "Coefficient is 0.450"
             return response
-
-        mock_llm.ainvoke = mock_ainvoke
-        mock_chat.return_value = mock_llm
 
         mock_vectorstore = MagicMock()
         mock_doc = Document(page_content="Coefficients: 0.450", metadata={"page": 10})
@@ -346,14 +354,21 @@ class TestSemanticAugmentationPipeline:
         mock_chroma.return_value = mock_vectorstore
 
         search_pipeline = SemanticSearchPipeline()
-        search_pipeline.llm = mock_llm
 
         with (
             patch.object(
                 search_pipeline, "_extract_text_from_pdf", return_value=[mock_doc]
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=[mock_doc]),
+            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
+            # Mock the chain creation
+            mock_prompt_instance = MagicMock()
+            mock_prompt.from_messages.return_value = mock_prompt_instance
+            mock_prompt_instance.__or__ = MagicMock(
+                return_value=MagicMock(ainvoke=mock_chain_invoke)
+            )
+
             await search_pipeline.process_document("paper.pdf")
 
             validator = SemanticValidator(search_pipeline=search_pipeline)
@@ -486,10 +501,9 @@ class TestSemanticAugmentationWorkflows:
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
         """Test realistic workflow: process paper → extract tables → validate."""
-        # Setup comprehensive mocks
-        mock_llm = MagicMock()
 
-        async def mock_ainvoke(inputs):
+        # Setup comprehensive mocks
+        async def mock_chain_invoke(inputs):
             question = inputs.get("question", "")
             response = MagicMock()
 
@@ -499,17 +513,16 @@ class TestSemanticAugmentationWorkflows:
                     "The treatment effect coefficient is 0.450 (SE=0.05), "
                     "statistically significant at p<0.01"
                 )
-            elif "sample size" in question.lower():
-                response.content = "The study included 5,000 students"
+            elif (
+                "sample size" in question.lower() or "observations" in question.lower()
+            ):
+                response.content = "The study included 5000 students"
             elif "mean" in question.lower() and "age" in question.lower():
                 response.content = "The mean age is 12.5 years (SD=1.8)"
             else:
                 response.content = "Information not available"
 
             return response
-
-        mock_llm.ainvoke = mock_ainvoke
-        mock_chat.return_value = mock_llm
 
         # Setup vectorstore with realistic document
         mock_vectorstore = MagicMock()
@@ -532,7 +545,6 @@ class TestSemanticAugmentationWorkflows:
         )
 
         search_pipeline = SemanticSearchPipeline(config=config)
-        search_pipeline.llm = mock_llm
 
         mock_docs = [
             Document(
@@ -547,7 +559,15 @@ class TestSemanticAugmentationWorkflows:
                 search_pipeline, "_extract_text_from_pdf", return_value=mock_docs
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=mock_docs),
+            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
+            # Mock the chain creation
+            mock_prompt_instance = MagicMock()
+            mock_prompt.from_messages.return_value = mock_prompt_instance
+            mock_prompt_instance.__or__ = MagicMock(
+                return_value=MagicMock(ainvoke=mock_chain_invoke)
+            )
+
             # Step 1: Process research paper
             await search_pipeline.process_document("research_paper.pdf")
 

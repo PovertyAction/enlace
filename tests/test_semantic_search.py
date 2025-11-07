@@ -280,23 +280,35 @@ class TestSemanticSearchPipeline:
     @patch("semantic_search.ChatAnthropic")
     async def test_semantic_qa_success(self, mock_chat, mock_embeddings):
         """Test successful semantic QA."""
-        mock_llm = MagicMock()
+        # Create mock response with proper string content
         mock_response = MagicMock()
         mock_response.content = "The coefficient is 0.45"
-        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
-        mock_chat.return_value = mock_llm
+
+        # Mock the chain's ainvoke (chain = qa_prompt | self.llm)
+        mock_chain = AsyncMock(return_value=mock_response)
 
         pipeline = SemanticSearchPipeline()
-        pipeline.llm = mock_llm
+        # Mock that document has been processed
+        pipeline.vectorstore = MagicMock()
 
         # Mock semantic search
         mock_chunks = [
             {"text": "Context about coefficient", "page": 5, "similarity_score": 0.85}
         ]
 
-        with patch.object(
-            pipeline, "semantic_search", return_value=mock_chunks
-        ) as mock_search:
+        with (
+            patch.object(
+                pipeline, "semantic_search", return_value=mock_chunks
+            ) as mock_search,
+            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
+        ):
+            # Mock the chain creation (qa_prompt | self.llm)
+            mock_prompt_instance = MagicMock()
+            mock_prompt.from_messages.return_value = mock_prompt_instance
+            mock_prompt_instance.__or__ = MagicMock(
+                return_value=MagicMock(ainvoke=mock_chain)
+            )
+
             result = await pipeline.semantic_qa("What is the coefficient?")
 
         mock_search.assert_called_once()
@@ -311,6 +323,8 @@ class TestSemanticSearchPipeline:
     async def test_semantic_qa_no_chunks_found(self, mock_chat, mock_embeddings):
         """Test semantic QA with no relevant chunks."""
         pipeline = SemanticSearchPipeline()
+        # Mock that document has been processed
+        pipeline.vectorstore = MagicMock()
 
         # Mock semantic search returning no results
         with patch.object(pipeline, "semantic_search", return_value=[]):
@@ -325,17 +339,27 @@ class TestSemanticSearchPipeline:
     @patch("semantic_search.ChatAnthropic")
     async def test_semantic_qa_llm_error(self, mock_chat, mock_embeddings):
         """Test semantic QA with LLM error."""
-        mock_llm = MagicMock()
-        mock_llm.ainvoke = AsyncMock(side_effect=Exception("LLM error"))
-        mock_chat.return_value = mock_llm
+        # Mock chain that raises an error
+        mock_chain = AsyncMock(side_effect=Exception("LLM error"))
 
         pipeline = SemanticSearchPipeline()
-        pipeline.llm = mock_llm
+        # Mock that document has been processed
+        pipeline.vectorstore = MagicMock()
 
         # Mock semantic search
         mock_chunks = [{"text": "Context", "page": 1, "similarity_score": 0.8}]
 
-        with patch.object(pipeline, "semantic_search", return_value=mock_chunks):
+        with (
+            patch.object(pipeline, "semantic_search", return_value=mock_chunks),
+            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
+        ):
+            # Mock the chain creation to raise error
+            mock_prompt_instance = MagicMock()
+            mock_prompt.from_messages.return_value = mock_prompt_instance
+            mock_prompt_instance.__or__ = MagicMock(
+                return_value=MagicMock(ainvoke=mock_chain)
+            )
+
             result = await pipeline.semantic_qa("Test question")
 
         assert result["answer"] is None
@@ -444,11 +468,9 @@ class TestSemanticSearchIntegration:
     ):
         """Test complete pipeline workflow from document to QA."""
         # Setup mocks
-        mock_llm = MagicMock()
         mock_response = MagicMock()
         mock_response.content = "The sample size is 5000 students"
-        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
-        mock_chat.return_value = mock_llm
+        mock_chain = AsyncMock(return_value=mock_response)
 
         mock_vectorstore = MagicMock()
         mock_doc = Document(
@@ -461,7 +483,6 @@ class TestSemanticSearchIntegration:
         mock_chroma.return_value = mock_vectorstore
 
         pipeline = SemanticSearchPipeline()
-        pipeline.llm = mock_llm
 
         # Mock document processing
         mock_docs = [Document(page_content="Test paper content", metadata={"page": 1})]
@@ -469,7 +490,15 @@ class TestSemanticSearchIntegration:
         with (
             patch.object(pipeline, "_extract_text_from_pdf", return_value=mock_docs),
             patch.object(pipeline, "_chunk_documents", return_value=mock_docs),
+            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
+            # Mock the chain creation for QA
+            mock_prompt_instance = MagicMock()
+            mock_prompt.from_messages.return_value = mock_prompt_instance
+            mock_prompt_instance.__or__ = MagicMock(
+                return_value=MagicMock(ainvoke=mock_chain)
+            )
+
             # Process document
             await pipeline.process_document("test.pdf")
 

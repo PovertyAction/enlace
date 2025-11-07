@@ -101,6 +101,34 @@ fmt-all: fmt-python lint-python lint-sql fmt-markdown
 pre-commit-run:
     pre-commit run
 
+# Run all tests
+test:
+    uv run pytest
+
+# Run tests with coverage
+test-cov:
+    uv run pytest --cov=src --cov-report=term-missing --cov-report=html
+
+# Run only unit tests
+test-unit:
+    uv run pytest -m unit
+
+# Run only integration tests
+test-integration:
+    uv run pytest -m integration
+
+# Run tests excluding slow tests
+test-fast:
+    uv run pytest -m "not slow"
+
+# Run tests in verbose mode
+test-verbose:
+    uv run pytest -vv
+
+# Run a specific test file
+test-file f:
+    uv run pytest {{ f }} -v
+
 [windows]
 pre-install:
     winget install Casey.Just astral-sh.uv prefix-dev.pixi GitHub.cli
