@@ -1,4 +1,5 @@
 import argparse
+import logging
 import re
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,9 @@ from docling.document_converter import (
 )
 from docling_core.types.doc import DoclingDocument, TableCell
 from pydantic import BaseModel, Field, field_validator
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # PYDANTIC MODELS FOR STRUCTURED DATA
@@ -379,6 +383,45 @@ class BalanceTable(BaseModel):
     )
 
 
+class Figure(BaseModel):
+    """Model for extracted figure/image from research paper."""
+
+    figure_id: str = Field(description="Unique identifier for this figure")
+    figure_number: str | None = Field(None, description="Figure number from paper")
+    caption: str | None = Field(None, description="Figure caption/title")
+    page_number: int | None = Field(
+        None, description="Page number where figure appears"
+    )
+
+    # Image file information
+    image_path: str | None = Field(
+        None, description="Relative path to saved image file"
+    )
+    image_format: str | None = Field(None, description="Image format (png, jpg, etc)")
+    image_width: int | None = Field(None, description="Image width in pixels")
+    image_height: int | None = Field(None, description="Image height in pixels")
+
+    # Classification
+    figure_type: str | None = Field(
+        None,
+        description="Type of figure (chart, diagram, photo, map, etc)",
+    )
+
+    # Quality metrics
+    quality_score: float | None = Field(
+        None, description="Extraction quality score (0-1)"
+    )
+
+    # Metadata
+    source_file: str | None = None
+    context_before: str | None = Field(None, description="Text appearing before figure")
+
+    # Semantic augmentation fields (optional)
+    figure_context: dict[str, Any] | None = Field(
+        None, description="Semantic context describing the figure content"
+    )
+
+
 # ============================================================================
 # MAIN EXTRACTOR CLASS
 # ============================================================================
@@ -389,11 +432,12 @@ class AcademicTableExtractor:
     Handles regression tables, summary statistics, and balance tables.
     """
 
-    def __init__(self, enable_ocr: bool = False):
+    def __init__(self, enable_ocr: bool = False, extract_figures: bool = True):
         """Initialize document converter with optimized settings.
 
         Args:
             enable_ocr: Whether to enable OCR for scanned documents
+            extract_figures: Whether to extract figures/images from documents
 
         """
         # Configure PDF pipeline for optimal table extraction
@@ -403,6 +447,10 @@ class AcademicTableExtractor:
             do_table_structure=True,
             do_ocr=enable_ocr,
             table_structure_options=table_structure_options,
+            # Enable figure extraction
+            generate_page_images=extract_figures,
+            generate_picture_images=extract_figures,
+            images_scale=2.0,  # 144 DPI resolution (scale=1 is 72 DPI)
         )
 
         self.converter = DocumentConverter(
@@ -413,6 +461,8 @@ class AcademicTableExtractor:
                 "docx": WordFormatOption(),
             }
         )
+
+        self.extract_figures = extract_figures
 
     def extract_cell_value(self, cell: TableCell) -> str:
         """Extract text value from a table cell."""
@@ -1202,6 +1252,133 @@ class AcademicTableExtractor:
         return " ".join(notes) if notes else None
 
     # ========================================================================
+    # FIGURE EXTRACTION METHODS
+    # ========================================================================
+
+    def extract_figures_from_document(
+        self, doc: DoclingDocument, output_dir: Path, file_stem: str
+    ) -> list[Figure]:
+        """Extract all figures/pictures from a docling document.
+
+        Args:
+            doc: Docling document with pictures
+            output_dir: Directory to save figure images
+            file_stem: Base name for saved files
+
+        Returns:
+            List of Figure objects with metadata and saved image paths
+
+        """
+        if not self.extract_figures:
+            return []
+
+        # Import PictureItem for type checking
+        from docling_core.types.doc import PictureItem
+
+        figures = []
+        figures_dir = output_dir / "figures"
+        figures_dir.mkdir(exist_ok=True)
+
+        figure_num = 1
+        # Use iterate_items() to traverse document elements
+        for element, _level in doc.iterate_items():
+            if not isinstance(element, PictureItem):
+                continue
+
+            picture = element
+            figure_id = f"figure_{figure_num}"
+
+            # Extract caption with multiple fallback strategies
+            caption = ""
+
+            # Strategy 1: Direct caption attribute
+            if hasattr(picture, "caption") and picture.caption:
+                if hasattr(picture.caption, "text"):
+                    caption = picture.caption.text.strip()
+                else:
+                    caption = str(picture.caption).strip()
+
+                # Ignore docling internal references like "#/pictures/0"
+                if caption.startswith("#/"):
+                    caption = ""
+
+            # Strategy 2: Check picture references
+            if not caption and hasattr(picture, "self_ref"):
+                ref = picture.self_ref.strip() if picture.self_ref else ""
+                if ref and not ref.startswith("#/"):
+                    caption = ref
+
+            # Extract page number
+            page_no = None
+            if (
+                hasattr(picture, "prov")
+                and picture.prov
+                and hasattr(picture.prov[0], "page_no")
+            ):
+                page_no = picture.prov[0].page_no
+
+            # Save image using get_image() method
+            image_path = None
+            image_format = "png"
+            image_width = None
+            image_height = None
+            quality_score = 0.0
+
+            try:
+                # Use get_image() method to retrieve the image
+                image = picture.get_image(doc)
+                if image is not None:
+                    image_filename = f"{figure_id}.png"
+                    image_filepath = figures_dir / image_filename
+
+                    # Save image as PNG
+                    with image_filepath.open("wb") as fp:
+                        image.save(fp, "PNG")
+
+                    image_path = f"figures/{image_filename}"
+
+                    # Get image dimensions
+                    if hasattr(image, "size"):
+                        image_width, image_height = image.size
+
+                    quality_score = 1.0
+                    logger.info(
+                        f"Saved {figure_id}: page {page_no}, {image_width}x{image_height}px"
+                    )
+                else:
+                    logger.warning(f"No image data available for {figure_id}")
+                    quality_score = 0.0
+            except Exception as e:
+                logger.warning(f"Failed to save figure {figure_id}: {str(e)}")
+                quality_score = 0.0
+
+            # Extract figure number from caption if available
+            figure_number = None
+            if caption:
+                fig_match = re.search(
+                    r"(?:Figure|Fig\.?)\s+(\d+[A-Za-z]?)", caption, re.IGNORECASE
+                )
+                if fig_match:
+                    figure_number = fig_match.group(1)
+
+            figure = Figure(
+                figure_id=figure_id,
+                figure_number=figure_number,
+                caption=caption if caption else None,
+                page_number=page_no,
+                image_path=image_path,
+                image_format=image_format if image_path else None,
+                image_width=image_width,
+                image_height=image_height,
+                quality_score=quality_score,
+            )
+
+            figures.append(figure)
+            figure_num += 1
+
+        return figures
+
+    # ========================================================================
     # MAIN EXTRACTION METHOD
     # ========================================================================
 
@@ -1304,12 +1481,33 @@ class AcademicTableExtractor:
                         f"  ✓ Regression Table {len(regression_tables)}: {len(reg_table.models)} models"
                     )
 
+        # Extract figures
+        figures = []
+        if self.extract_figures:
+            print("\nExtracting figures...")
+            figures = self.extract_figures_from_document(
+                doc, output_dir, file_path.stem
+            )
+
+            # Save figure metadata
+            for figure in figures:
+                if figure.quality_score > 0:
+                    output_file = output_dir / "figures" / f"{figure.figure_id}.json"
+                    with open(output_file, "w") as f:
+                        f.write(figure.model_dump_json(indent=2))
+
+                    print(
+                        f"  ✓ {figure.figure_id}: page {figure.page_number}, "
+                        f"{figure.image_width}x{figure.image_height}px"
+                    )
+
         # Create summary
         summary = {
             "file_name": file_path.name,
             "regression_tables": len(regression_tables),
             "summary_tables": len(summary_tables),
             "balance_tables": len(balance_tables),
+            "figures": len(figures),
         }
 
         summary_df = pd.DataFrame([summary])
@@ -1320,7 +1518,8 @@ class AcademicTableExtractor:
         print(f"\n{'=' * 60}")
         print(
             f"Extraction complete: {len(regression_tables)} regression, "
-            f"{len(summary_tables)} summary, {len(balance_tables)} balance tables"
+            f"{len(summary_tables)} summary, {len(balance_tables)} balance tables, "
+            f"{len(figures)} figures"
         )
         print(f"{'=' * 60}\n")
 
@@ -1328,6 +1527,7 @@ class AcademicTableExtractor:
             "regression_tables": regression_tables,
             "summary_tables": summary_tables,
             "balance_tables": balance_tables,
+            "figures": figures,
             "summary": summary,
         }
 

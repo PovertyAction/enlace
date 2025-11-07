@@ -53,6 +53,9 @@ class ContentExtractor:
         self.table_augmenter = None
         self.semantic_validator = None
 
+        # Store last conversion result for figure extraction
+        self._last_conversion_result = None
+
         if enable_augmentation:
             logger.info("Semantic augmentation enabled - initializing components")
             self._initialize_augmentation()
@@ -359,10 +362,14 @@ class ContentExtractor:
 
             logger.info(f"Converting PDF to markdown using docling: {paper_path}")
 
-            # Configure pipeline for table extraction
+            # Configure pipeline for table and figure extraction
             pipeline_options = PdfPipelineOptions()
             pipeline_options.do_table_structure = True
             pipeline_options.do_ocr = False  # Disable OCR by default for speed
+            # Enable figure extraction
+            pipeline_options.generate_page_images = True
+            pipeline_options.generate_picture_images = True
+            pipeline_options.images_scale = 2.0  # 144 DPI resolution
 
             converter = DocumentConverter(
                 format_options={
@@ -372,6 +379,9 @@ class ContentExtractor:
 
             # Convert PDF
             result = converter.convert(str(paper_path))
+
+            # Store the conversion result for later use (figure extraction)
+            self._last_conversion_result = result
 
             # Export to markdown
             markdown_text = result.document.export_to_markdown()
@@ -591,17 +601,97 @@ class ContentExtractor:
     async def _extract_figures(
         self, pdf_path: Path, markdown_path: Path, output_dir: Path
     ) -> list[dict]:
-        """Extract all figures from the paper.
+        """Extract all figures from the paper using docling.
 
-        Uses pdf-processor skill.
+        Uses the docling conversion result stored during markdown conversion.
         """
         figures_dir = output_dir / "figures"
         figures_dir.mkdir(exist_ok=True)
 
         figures = []
 
-        # TODO: Invoke pdf-processor to extract figures
-        # This would extract images and save with metadata
+        # Check if we have a conversion result with pictures
+        if not self._last_conversion_result:
+            logger.warning("No conversion result available for figure extraction")
+            return figures
+
+        doc = self._last_conversion_result.document
+
+        # Import PictureItem for type checking
+        from docling_core.types.doc import PictureItem
+
+        figure_num = 1
+        # Use iterate_items() to traverse document elements
+        for element, _level in doc.iterate_items():
+            if not isinstance(element, PictureItem):
+                continue
+
+            picture = element
+            figure_id = f"figure_{figure_num}"
+
+            # Extract caption
+            caption = ""
+            if hasattr(picture, "caption") and picture.caption:
+                if hasattr(picture.caption, "text"):
+                    caption = picture.caption.text.strip()
+                else:
+                    caption = str(picture.caption).strip()
+
+                # Ignore docling internal references
+                if caption.startswith("#/"):
+                    caption = ""
+
+            # Extract page number
+            page_no = None
+            if (
+                hasattr(picture, "prov")
+                and picture.prov
+                and hasattr(picture.prov[0], "page_no")
+            ):
+                page_no = picture.prov[0].page_no
+
+            # Save image using get_image() method
+            image_path = None
+            image_width = None
+            image_height = None
+
+            try:
+                # Use get_image() method to retrieve the image
+                image = picture.get_image(doc)
+                if image is not None:
+                    image_filename = f"{figure_id}.png"
+                    image_filepath = figures_dir / image_filename
+
+                    # Save image as PNG
+                    with image_filepath.open("wb") as fp:
+                        image.save(fp, "PNG")
+
+                    image_path = f"figures/{image_filename}"
+
+                    # Get image dimensions
+                    if hasattr(image, "size"):
+                        image_width, image_height = image.size
+
+                    logger.info(
+                        f"Saved {figure_id}: page {page_no}, {image_width}x{image_height}px"
+                    )
+                else:
+                    logger.warning(f"No image data available for {figure_id}")
+            except Exception as e:
+                logger.warning(f"Failed to save figure {figure_id}: {str(e)}")
+
+            # Create figure metadata
+            figure = {
+                "figure_id": figure_id,
+                "caption": caption if caption else None,
+                "page": page_no,
+                "image_path": image_path,
+                "width": image_width,
+                "height": image_height,
+            }
+
+            figures.append(figure)
+            figure_num += 1
 
         return figures
 
