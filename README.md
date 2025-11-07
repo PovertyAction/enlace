@@ -16,10 +16,12 @@ datasets and harmonizing variables across studies.
 ## Components
 
 - **Paper Parsing**: Scripts and models for extracting structured data from research
-  papers in PDF or DOCX/DOC format.
+  papers in PDF or DOCX format using docling.
+- **Semantic Augmentation** (NEW): RAG-based system that enhances table extraction
+  with semantic context from paper text, helping with data harmonization and error detection.
 - **Microdata Linking**: Tools for connecting extracted study information to
   underlying microdata sources.
-- **Data Harmonization**: Functions for standardizing variables and outcomes across.
+- **Data Harmonization**: Functions for standardizing variables and outcomes across
   studies to facilitate meta-analysis.
 
 ## Development set up
@@ -88,3 +90,49 @@ environment:
 | Bash       | `.venv/Scripts/activate`                |
 | Powershell | `.venv/Scripts/activate.ps1`            |
 | Nushell    | `overlay use .venv/Scripts/activate.nu` |
+
+## Quick Start
+
+### Extract Tables from Research Papers
+
+```bash
+# Basic extraction
+python src/parse.py paper.pdf -o output/
+
+# With semantic augmentation (adds context from paper text)
+uv run python .claude/subagents/content-extractor/extractor.py paper.pdf --augment
+
+# Batch process multiple papers
+python src/parse.py papers/ --batch -o output/
+```
+
+### Run Tests
+
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=src --cov-report=term-missing
+```
+
+## Features
+
+### Semantic Table Augmentation (NEW)
+
+The semantic augmentation system enhances table extraction by adding context from the paper text:
+
+- **Variable Context**: Definitions, measurement units, data sources
+- **Treatment Context**: Intervention details, implementation
+- **Sample Context**: Population characteristics, selection criteria
+- **Methods Context**: Estimation techniques, standard error types
+- **Error Detection**: Cross-validates parsed values to catch OCR errors
+- **Confidence Scores**: Quality metrics for extracted information
+
+See [docs/SUBAGENT_ARCHITECTURE.md](docs/SUBAGENT_ARCHITECTURE.md) for complete documentation.
+
+## Documentation
+
+- [CLAUDE.md](CLAUDE.md) - Development guide for Claude Code
+- [docs/SUBAGENT_ARCHITECTURE.md](docs/SUBAGENT_ARCHITECTURE.md) - Semantic augmentation architecture
+- [tests/README.md](tests/README.md) - Testing documentation
