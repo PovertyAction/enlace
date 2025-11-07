@@ -17,6 +17,7 @@ dependencies = [
     "langchain-anthropic>=0.3.9",
     "langchain-chroma>=0.2.2",
     "langchain-huggingface>=0.1.4",
+    "langchain-text-splitters>=1.0.0",
     "nbstata>=0.8.3",
     "pandas>=2.2.3",
     "pydantic>=2.12.4",
@@ -83,6 +84,18 @@ ignore = [
 [tool.ruff.format]
 docstring-code-format = true
 docstring-code-line-length = 88
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--strict-markers"
+markers = [
+    "unit: Fast unit tests with mocked dependencies",
+    "integration: Integration tests that test multiple components together",
+    "slow: Tests that take longer to run (require actual models, etc.)",
+]
 
 [tool.codespell]
 builtin = "clear,rare,informal,usage,code,names"
