@@ -47,7 +47,7 @@ class TestSemanticSearchPipeline:
             embedding_model="custom/model",
             chunk_size=500,
             chunk_overlap=50,
-            llm_model="claude-3-5-sonnet-20241022",
+            llm_model="claude-4-5-haiku",
         )
 
         mock_embeddings_instance = MagicMock()

@@ -52,7 +52,7 @@ class ExtractionConfig(BaseSettings):
         description="HuggingFace embedding model for RAG",
     )
     llm_model: str = Field(
-        default="claude-3-5-sonnet",
+        default="claude-4-5-haiku",
         description="LLM model for semantic extraction",
     )
 

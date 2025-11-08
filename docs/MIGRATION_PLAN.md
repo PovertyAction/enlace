@@ -961,7 +961,7 @@ class ExtractionConfig(BaseSettings):
         description="HuggingFace embedding model for RAG"
     )
     llm_model: str = Field(
-        default="claude-3-5-sonnet",  # Stable model name without date
+        default="claude-4-5-haiku",  # Stable model name without date
         description="LLM model for semantic extraction"
     )
 
@@ -1102,7 +1102,7 @@ output_dir = "extracted_data"
 max_workers = 8
 
 # LLM configuration
-llm_model = "claude-3-5-sonnet"
+llm_model = "claude-4-5-haiku"
 embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
 
 [tool.enlace.validation]
@@ -1485,7 +1485,7 @@ from enlace.core.config import ExtractionConfig
 # Enable semantic augmentation
 config = ExtractionConfig(
     enable_augmentation=True,
-    llm_model="claude-4-5-sonnet",
+    llm_model="claude-4-5-haiku",
     embedding_model="sentence-transformers/all-MiniLM-L6-v2"
 )
 
