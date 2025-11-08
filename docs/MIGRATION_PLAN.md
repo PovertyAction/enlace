@@ -1,0 +1,1904 @@
+# Migration Plan: Subagent Code to Core Package
+
+## Overview
+
+Move the functionality from `.claude/subagents/` into the core `src/` package to create a standalone, AI-agent-independent library suitable for packaging as a CLI tool or Python package.
+
+This plan defines precise contracts between components, error handling strategies, and configuration management to ensure robust, production-ready code.
+
+---
+
+## **Core Design Contracts**
+
+### Data Models (Pydantic Schemas)
+
+```python
+# src/models/extraction.py
+from pydantic import BaseModel, Field
+from pathlib import Path
+from datetime import datetime
+
+class ExtractionResult(BaseModel):
+    """Result from paper extraction operation."""
+
+    paper_id: str = Field(description="Unique paper identifier")
+    source_file: Path = Field(description="Path to source PDF/DOCX")
+    extraction_date: datetime = Field(default_factory=datetime.now)
+
+    # Extracted content
+    tables: list[RegressionTable | SummaryStatisticsTable | BalanceTable] = Field(default_factory=list)
+    figures: list[Figure] = Field(default_factory=list)
+    metadata: PaperMetadata = Field(description="Paper metadata (title, authors, etc)")
+
+    # Quality metrics
+    extraction_quality: float = Field(ge=0.0, le=1.0, description="Overall quality score")
+    warnings: list[str] = Field(default_factory=list)
+
+    # Processing info
+    processing_time_seconds: float | None = None
+    tables_extracted: int = Field(default=0)
+    figures_extracted: int = Field(default=0)
+
+    def save(self, output_dir: Path, format: str = "json") -> None:
+        """Save extraction result to file.
+
+        Args:
+            output_dir: Directory to save output files
+            format: Output format (json, csv, both)
+
+        Raises:
+            ExtractionError: If save operation fails
+        """
+        ...
+
+class PaperMetadata(BaseModel):
+    """Metadata extracted from research paper."""
+
+    title: str | None = None
+    authors: list[str] = Field(default_factory=list)
+    year: int | None = None
+    doi: str | None = None
+    journal: str | None = None
+    abstract: str | None = None
+
+
+class ValidationResult(BaseModel):
+    """Result from validation operation."""
+
+    paper_id: str
+    validation_date: datetime = Field(default_factory=datetime.now)
+    extraction_path: Path
+
+    # Status
+    passed: bool = Field(description="True if all checks passed")
+    score: float = Field(ge=0.0, le=1.0, description="Overall validation score")
+
+    # Issues
+    issues: list[ValidationIssue] = Field(default_factory=list, description="Critical issues that cause failure")
+    warnings: list[ValidationWarning] = Field(default_factory=list, description="Non-critical warnings")
+
+    # Check results
+    checks: dict[str, CheckResult] = Field(default_factory=dict)
+    table_validations: list[TableValidationResult] = Field(default_factory=list)
+
+    # Recommendations
+    recommendations: list[str] = Field(default_factory=list)
+
+    def save(self, output_dir: Path) -> None:
+        """Save validation report to JSON file."""
+        ...
+
+
+class ValidationIssue(BaseModel):
+    """Critical validation issue."""
+    check_name: str
+    severity: str = "error"
+    message: str
+    location: str | None = None
+
+
+class ValidationWarning(BaseModel):
+    """Non-critical validation warning."""
+    check_name: str
+    message: str
+    location: str | None = None
+
+
+class CheckResult(BaseModel):
+    """Result from individual validation check."""
+    passed: bool
+    score: float = Field(ge=0.0, le=1.0)
+    issues: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TableValidationResult(BaseModel):
+    """Validation result for single table."""
+    table_id: str
+    passed: bool
+    quality_score: float
+    issues: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+```
+
+### Function Signatures (Public API)
+
+```python
+# src/core/extractor.py
+from typing import Protocol
+from pathlib import Path
+
+class PaperExtractor:
+    """Extract structured data from research papers.
+
+    This is the main entry point for extracting tables, figures, and metadata
+    from PDF or DOCX research papers.
+
+    Example:
+        >>> config = ExtractionConfig(enable_augmentation=True)
+        >>> extractor = PaperExtractor(config)
+        >>> result = extractor.extract(Path("paper.pdf"))
+        >>> result.save(Path("output"))
+    """
+
+    def __init__(self, config: ExtractionConfig) -> None:
+        """Initialize extractor with configuration.
+
+        Args:
+            config: Extraction configuration options
+
+        Raises:
+            ConfigError: If configuration is invalid
+        """
+        ...
+
+    def extract(self, paper_path: Path) -> ExtractionResult:
+        """Extract all content from a research paper.
+
+        Args:
+            paper_path: Path to PDF or DOCX file
+
+        Returns:
+            ExtractionResult containing tables, figures, and metadata
+
+        Raises:
+            PaperNotFoundError: If paper_path does not exist
+            ExtractionError: If extraction fails
+            UnsupportedFormatError: If file format is not supported
+        """
+        ...
+
+    def augment(self, extraction: ExtractionResult) -> ExtractionResult:
+        """Augment extraction with semantic context using RAG.
+
+        Args:
+            extraction: Result from extract() method
+
+        Returns:
+            Enhanced ExtractionResult with semantic context fields populated
+
+        Raises:
+            AugmentationError: If augmentation fails
+            ModelNotFoundError: If embedding/LLM model is not available
+        """
+        ...
+
+
+# src/core/validator.py
+class ExtractionValidator:
+    """Validate extracted research data quality.
+
+    Performs configurable validation checks on extraction results to ensure
+    data quality and consistency.
+
+    Example:
+        >>> config = ValidationConfig(level="comprehensive")
+        >>> validator = ExtractionValidator(config)
+        >>> result = validator.validate(extraction_result)
+        >>> if not result.passed:
+        ...     print(f"Validation failed: {result.issues}")
+    """
+
+    def __init__(self, config: ValidationConfig) -> None:
+        """Initialize validator with configuration.
+
+        Args:
+            config: Validation configuration
+
+        Raises:
+            ConfigError: If configuration is invalid
+        """
+        ...
+
+    def validate(
+        self,
+        extraction: ExtractionResult | Path,
+        level: str | None = None
+    ) -> ValidationResult:
+        """Validate extraction result.
+
+        Args:
+            extraction: ExtractionResult object or path to extraction.json
+            level: Override validation level from config (quick, standard, comprehensive)
+
+        Returns:
+            ValidationResult with check results and recommendations
+
+        Raises:
+            ValidationError: If validation cannot be performed
+            FileNotFoundError: If extraction path does not exist
+        """
+        ...
+
+    def validate_batch(
+        self,
+        extractions: list[ExtractionResult] | Path,
+        level: str | None = None
+    ) -> BatchValidationResult:
+        """Validate multiple extractions in batch.
+
+        Args:
+            extractions: List of ExtractionResults or directory containing extractions
+            level: Validation level override
+
+        Returns:
+            BatchValidationResult with aggregated statistics
+
+        Raises:
+            ValidationError: If batch validation fails
+        """
+        ...
+```
+
+---
+
+## **Error Handling & Logging Strategy**
+
+### Custom Exception Hierarchy
+
+```python
+# src/exceptions.py
+"""Custom exceptions for enlace package."""
+
+class EnlaceError(Exception):
+    """Base exception for all enlace errors."""
+    pass
+
+
+class ConfigError(EnlaceError):
+    """Configuration-related errors."""
+    pass
+
+
+class PaperNotFoundError(EnlaceError):
+    """Paper file not found."""
+    def __init__(self, path: Path):
+        super().__init__(f"Paper file not found: {path}")
+        self.path = path
+
+
+class UnsupportedFormatError(EnlaceError):
+    """Unsupported file format."""
+    def __init__(self, path: Path, supported_formats: list[str]):
+        super().__init__(
+            f"Unsupported format for {path}. "
+            f"Supported formats: {', '.join(supported_formats)}"
+        )
+        self.path = path
+        self.supported_formats = supported_formats
+
+
+class ExtractionError(EnlaceError):
+    """Extraction operation failed."""
+    pass
+
+
+class AugmentationError(EnlaceError):
+    """Semantic augmentation failed."""
+    pass
+
+
+class ModelNotFoundError(EnlaceError):
+    """Required model not found or not available."""
+    def __init__(self, model_name: str, model_type: str):
+        super().__init__(f"{model_type} model not found: {model_name}")
+        self.model_name = model_name
+        self.model_type = model_type
+
+
+class ValidationError(EnlaceError):
+    """Validation operation failed."""
+    pass
+```
+
+### Logging Configuration
+
+```python
+# src/utils/logging.py
+"""Centralized logging configuration."""
+import logging
+import sys
+from pathlib import Path
+
+def setup_logging(
+    level: str = "INFO",
+    log_file: Path | None = None,
+    verbose: bool = False
+) -> logging.Logger:
+    """Configure logging for enlace package.
+
+    Args:
+        level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        log_file: Optional file to write logs to
+        verbose: Enable verbose output (sets DEBUG level)
+
+    Returns:
+        Configured logger instance
+    """
+    if verbose:
+        level = "DEBUG"
+
+    # Create formatter
+    formatter = logging.Formatter(
+        fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    # Configure root logger
+    logger = logging.getLogger("enlace")
+    logger.setLevel(level)
+
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # File handler (optional)
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+    return logger
+```
+
+---
+
+## **Phase 1: Core Architecture Refactoring**
+
+### 1.1 Module Consolidation Mapping
+
+**Explicit mapping from old to new:**
+
+| Current File | New Location | Notes |
+|--------------|--------------|-------|
+| `parse.py` (classes) | `src/models/tables.py` | Pydantic models only |
+| `parse.py` (AcademicTableExtractor) | `src/core/parser.py` | Parsing logic |
+| `augmentation_config.py` | `src/core/config.py` | Merge into unified config |
+| `semantic_search.py` | `src/semantic/search.py` | RAG pipeline |
+| `context_models.py` | `src/semantic/models.py` | Context Pydantic models |
+| `context_extractors.py` | `src/semantic/extractors.py` | Context extraction |
+| `semantic_validator.py` | `src/validators/semantic.py` | Cross-validation checks |
+| `table_augmenter.py` | `src/semantic/augmenter.py` | Table augmentation |
+
+### 1.2 Proposed Directory Structure
+
+```text
+src/
+├── core/
+│   ├── __init__.py
+│   ├── extractor.py           # Main extraction orchestrator
+│   ├── parser.py              # Table/figure parsing (from parse.py)
+│   ├── validator.py           # Quality validation orchestrator
+│   ├── metadata.py            # Metadata extraction
+│   └── config.py              # Unified configuration
+│
+├── semantic/
+│   ├── __init__.py
+│   ├── search.py              # RAG search pipeline (from semantic_search.py)
+│   ├── augmenter.py           # Table augmentation (from table_augmenter.py)
+│   ├── models.py              # Context models (from context_models.py)
+│   └── extractors.py          # Context extractors (from context_extractors.py)
+│
+├── models/
+│   ├── __init__.py
+│   ├── tables.py              # Table Pydantic models (from parse.py)
+│   ├── figures.py             # Figure models (from parse.py)
+│   ├── extraction.py          # ExtractionResult, PaperMetadata
+│   └── validation.py          # ValidationResult and check models
+│
+├── validators/
+│   ├── __init__.py
+│   ├── structure.py           # Schema validation
+│   ├── completeness.py        # Data completeness checks
+│   ├── accuracy.py            # Accuracy checks
+│   ├── statistical.py         # Statistical consistency
+│   ├── missing_data.py        # Missing data analysis
+│   └── semantic.py            # Cross-validation (from semantic_validator.py)
+│
+├── cli/
+│   ├── __init__.py
+│   ├── main.py                # Main CLI entry point
+│   ├── extract.py             # Extract command
+│   ├── validate.py            # Validate command
+│   └── batch.py               # Batch processing command
+│
+├── utils/
+│   ├── __init__.py
+│   ├── io.py                  # File I/O utilities
+│   ├── docling_utils.py       # Docling helpers
+│   ├── formatting.py          # Output formatting
+│   └── logging.py             # Logging configuration
+│
+└── exceptions.py              # Custom exception hierarchy
+```
+
+---
+
+## **Phase 2: Migrate Content Extractor**
+
+### 2.1 Extract Core Logic from `extractor.py`
+
+**Key components to migrate:**
+
+1. **`ContentExtractor` class** → `src/core/extractor.py` as `PaperExtractor`
+   - Remove AI-agent specific logging
+   - Use centralized logging from `src/utils/logging.py`
+   - Replace dict returns with `ExtractionResult` Pydantic model
+   - Add proper exception handling with custom exceptions
+
+2. **Document Conversion** (`_convert_to_markdown`)
+   - Move to `src/utils/docling_utils.py`
+   - Make it a public function: `convert_pdf_to_markdown()`
+   - Add error handling for conversion failures
+
+3. **Table Extraction** (`_extract_tables`)
+   - Refactor to use `TableParser` from `src/core/parser.py`
+   - Return structured Pydantic models from `src/models/tables.py`
+
+4. **Figure Extraction** (`_extract_figures`)
+   - Move to `src/core/parser.py`
+   - Use `Figure` model from `src/models/figures.py`
+
+5. **Metadata Extraction** (`_extract_metadata`, `_extract_citations`, `_extract_methodology`)
+   - Create `src/core/metadata.py` module
+   - Return `PaperMetadata` Pydantic model
+
+### 2.2 Simplified Augmentation Integration
+
+```python
+# src/core/extractor.py
+from pathlib import Path
+from enlace.core.config import ExtractionConfig
+from enlace.core.parser import TableParser
+from enlace.models.extraction import ExtractionResult
+from enlace.exceptions import PaperNotFoundError, ExtractionError
+from enlace.utils.logging import setup_logging
+import logging
+
+logger = logging.getLogger("enlace.extractor")
+
+
+class PaperExtractor:
+    """Extract structured data from research papers."""
+
+    SUPPORTED_FORMATS = [".pdf", ".docx"]
+
+    def __init__(self, config: ExtractionConfig) -> None:
+        """Initialize extractor with configuration."""
+        self.config = config
+        self.parser = TableParser(config)
+        self.logger = setup_logging(
+            level="DEBUG" if config.verbose else "INFO",
+            log_file=config.log_file
+        )
+
+    def extract(self, paper_path: Path) -> ExtractionResult:
+        """Extract tables, figures, metadata from paper.
+
+        Args:
+            paper_path: Path to PDF or DOCX file
+
+        Returns:
+            ExtractionResult with extracted content
+
+        Raises:
+            PaperNotFoundError: If paper_path does not exist
+            UnsupportedFormatError: If file format is not supported
+            ExtractionError: If extraction fails
+        """
+        if not paper_path.exists():
+            raise PaperNotFoundError(paper_path)
+
+        if paper_path.suffix.lower() not in self.SUPPORTED_FORMATS:
+            raise UnsupportedFormatError(paper_path, self.SUPPORTED_FORMATS)
+
+        try:
+            # Core extraction logic
+            self.logger.info(f"Extracting from {paper_path.name}")
+            # ... implementation ...
+            return extraction_result
+
+        except Exception as e:
+            self.logger.error(f"Extraction failed: {e}", exc_info=True)
+            raise ExtractionError(f"Failed to extract from {paper_path}") from e
+
+    def augment(self, extraction: ExtractionResult) -> ExtractionResult:
+        """Augment with semantic context."""
+        if not self.config.enable_augmentation:
+            self.logger.debug("Augmentation disabled, skipping")
+            return extraction
+
+        try:
+            from enlace.semantic.augmenter import TableAugmenter
+            augmenter = TableAugmenter(self.config)
+            return augmenter.augment(extraction)
+        except ImportError as e:
+            raise AugmentationError("Semantic augmentation dependencies not installed") from e
+        except Exception as e:
+            self.logger.error(f"Augmentation failed: {e}", exc_info=True)
+            raise AugmentationError("Failed to augment extraction") from e
+```
+
+---
+
+## **Phase 3: Migrate Data Quality Checker**
+
+### 3.1 Extract Validation Logic with Configurable Levels
+
+```python
+# src/core/config.py
+from pydantic import BaseModel, Field
+from pathlib import Path
+
+class ValidationConfig(BaseModel):
+    """Configuration for validation."""
+
+    level: str = Field(default="standard", description="Validation level name")
+    output_dir: Path = Field(default=Path("validation_reports"))
+    fail_on_issues: bool = Field(default=False, description="Exit with error if issues found")
+
+    # Configurable validation level definitions
+    levels: dict[str, list[str]] = Field(
+        default={
+            "quick": ["structure", "completeness"],
+            "standard": ["structure", "completeness", "accuracy", "missing_data"],
+            "comprehensive": [
+                "structure",
+                "completeness",
+                "accuracy",
+                "statistical_consistency",
+                "missing_data",
+                "semantic_validation"
+            ],
+        },
+        description="Mapping of level names to check lists"
+    )
+
+    def get_checks_for_level(self, level: str | None = None) -> list[str]:
+        """Get list of checks for specified level.
+
+        Args:
+            level: Level name (uses self.level if None)
+
+        Returns:
+            List of check names to run
+
+        Raises:
+            ConfigError: If level not found
+        """
+        level = level or self.level
+        if level not in self.levels:
+            raise ConfigError(f"Unknown validation level: {level}. Available: {list(self.levels.keys())}")
+        return self.levels[level]
+
+
+# src/core/validator.py
+from enlace.core.config import ValidationConfig
+from enlace.models.validation import ValidationResult
+from enlace.models.extraction import ExtractionResult
+from enlace.exceptions import ValidationError
+import logging
+
+logger = logging.getLogger("enlace.validator")
+
+
+class ExtractionValidator:
+    """Validate extracted research data."""
+
+    def __init__(self, config: ValidationConfig) -> None:
+        """Initialize validator with configuration."""
+        self.config = config
+        # Import validation check modules dynamically
+        self._check_modules = self._load_check_modules()
+
+    def _load_check_modules(self) -> dict:
+        """Load validation check modules."""
+        from enlace.validators import (
+            structure,
+            completeness,
+            accuracy,
+            statistical,
+            missing_data,
+            semantic,
+        )
+
+        return {
+            "structure": structure.validate_structure,
+            "completeness": completeness.validate_completeness,
+            "accuracy": accuracy.validate_accuracy,
+            "statistical_consistency": statistical.validate_statistical_consistency,
+            "missing_data": missing_data.validate_missing_data,
+            "semantic_validation": semantic.validate_semantic_consistency,
+        }
+
+    def validate(
+        self,
+        extraction: ExtractionResult,
+        level: str | None = None
+    ) -> ValidationResult:
+        """Run validation checks based on level."""
+        checks_to_run = self.config.get_checks_for_level(level)
+        logger.info(f"Running {len(checks_to_run)} validation checks: {checks_to_run}")
+
+        result = ValidationResult(
+            paper_id=extraction.paper_id,
+            extraction_path=extraction.source_file,
+        )
+
+        for check_name in checks_to_run:
+            check_func = self._check_modules.get(check_name)
+            if not check_func:
+                logger.warning(f"Check not found: {check_name}")
+                continue
+
+            try:
+                check_result = check_func(extraction)
+                result.checks[check_name] = check_result
+
+                # Collect issues and warnings
+                result.issues.extend(check_result.issues)
+                result.warnings.extend(check_result.warnings)
+
+            except Exception as e:
+                logger.error(f"Check {check_name} failed: {e}", exc_info=True)
+                result.warnings.append(f"Check {check_name} failed: {str(e)}")
+
+        # Calculate overall score and pass/fail
+        result.score = self._calculate_score(result)
+        result.passed = len(result.issues) == 0 and result.score >= 0.7
+
+        return result
+
+    def _calculate_score(self, result: ValidationResult) -> float:
+        """Calculate weighted validation score."""
+        # Implementation
+        ...
+```
+
+### 3.2 Separate Validation Checks
+
+Each validator module follows this pattern:
+
+```python
+# src/validators/structure.py
+"""Schema and structure validation."""
+from enlace.models.extraction import ExtractionResult
+from enlace.models.validation import CheckResult
+import logging
+
+logger = logging.getLogger("enlace.validators.structure")
+
+
+def validate_structure(extraction: ExtractionResult) -> CheckResult:
+    """Validate extraction data structure and required fields.
+
+    Checks:
+    - Required fields are present
+    - Data types are correct
+    - Lists are properly formatted
+
+    Args:
+        extraction: ExtractionResult to validate
+
+    Returns:
+        CheckResult with validation outcome
+    """
+    issues = []
+    warnings = []
+
+    # Check required fields
+    if not extraction.paper_id:
+        issues.append("Missing required field: paper_id")
+
+    if not extraction.tables and not extraction.figures:
+        warnings.append("No tables or figures extracted")
+
+    # More checks...
+
+    score = 1.0 if len(issues) == 0 else 0.0
+
+    return CheckResult(
+        passed=len(issues) == 0,
+        score=score,
+        issues=issues,
+        warnings=warnings,
+        metadata={"fields_checked": ["paper_id", "tables", "figures"]}
+    )
+```
+
+---
+
+## **Phase 4: Unified CLI Interface**
+
+### 4.1 Create Main CLI Entry Point
+
+```python
+# src/cli/main.py
+"""Enlace CLI - Extract and validate research paper data."""
+import typer
+from pathlib import Path
+from typing import Optional
+import sys
+
+from enlace.core.extractor import PaperExtractor
+from enlace.core.validator import ExtractionValidator
+from enlace.core.config import ExtractionConfig, ValidationConfig
+from enlace.exceptions import EnlaceError
+from enlace.utils.logging import setup_logging
+import logging
+
+app = typer.Typer(
+    name="enlace",
+    help="Extract and validate research paper data",
+    add_completion=False
+)
+
+logger = logging.getLogger("enlace.cli")
+
+
+@app.command()
+def extract(
+    input_path: Path = typer.Argument(..., help="Path to PDF or DOCX file"),
+    output_dir: Path = typer.Option(Path("output"), "--output", "-o", help="Output directory"),
+    augment: bool = typer.Option(False, "--augment", help="Enable semantic augmentation"),
+    ocr: bool = typer.Option(False, "--ocr", help="Enable OCR for scanned documents"),
+    format: str = typer.Option("json", "--format", "-f", help="Output format (json, csv, both)"),
+    config_file: Optional[Path] = typer.Option(None, "--config", "-c", help="Configuration file"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+):
+    """Extract tables, figures, and metadata from research papers."""
+    try:
+        # Setup logging
+        setup_logging(verbose=verbose)
+
+        # Load configuration
+        config = ExtractionConfig.load_config(
+            config_file=config_file,
+            enable_augmentation=augment,
+            enable_ocr=ocr,
+            output_format=format,
+            output_dir=output_dir,
+        )
+
+        # Extract
+        extractor = PaperExtractor(config)
+        result = extractor.extract(input_path)
+
+        if augment:
+            result = extractor.augment(result)
+
+        # Save
+        result.save(output_dir, format=format)
+
+        typer.secho(f"✓ Extraction complete: {result.paper_id}", fg=typer.colors.GREEN)
+        typer.echo(f"  Tables: {result.tables_extracted}")
+        typer.echo(f"  Figures: {result.figures_extracted}")
+        typer.echo(f"  Quality: {result.extraction_quality:.2f}")
+        typer.echo(f"  Output: {output_dir / result.paper_id}")
+
+    except EnlaceError as e:
+        logger.error(str(e))
+        typer.secho(f"✗ Error: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+    except Exception as e:
+        logger.exception("Unexpected error")
+        typer.secho(f"✗ Unexpected error: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def validate(
+    extraction_path: Path = typer.Argument(..., help="Path to extraction.json or directory"),
+    level: str = typer.Option("standard", "--level", "-l", help="Validation level (quick, standard, comprehensive)"),
+    output_dir: Path = typer.Option(Path("validation_reports"), "--output", "-o", help="Output directory"),
+    config_file: Optional[Path] = typer.Option(None, "--config", "-c", help="Configuration file"),
+    fail_on_issues: bool = typer.Option(False, "--fail-on-issues", help="Exit with error if issues found"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+):
+    """Validate extracted research data."""
+    try:
+        setup_logging(verbose=verbose)
+
+        config = ValidationConfig.load_config(
+            config_file=config_file,
+            level=level,
+            output_dir=output_dir,
+            fail_on_issues=fail_on_issues,
+        )
+
+        validator = ExtractionValidator(config)
+        result = validator.validate(extraction_path, level=level)
+
+        result.save(output_dir)
+
+        # Display results
+        status = typer.style("✓ PASSED", fg=typer.colors.GREEN) if result.passed else typer.style("✗ FAILED", fg=typer.colors.RED)
+        typer.echo(f"{status}: {result.paper_id}")
+        typer.echo(f"  Score: {result.score:.2f}")
+        typer.echo(f"  Issues: {len(result.issues)}")
+        typer.echo(f"  Warnings: {len(result.warnings)}")
+
+        if result.issues:
+            typer.echo("\nIssues:")
+            for issue in result.issues[:5]:
+                typer.secho(f"  - {issue}", fg=typer.colors.RED)
+
+        if result.recommendations:
+            typer.echo("\nRecommendations:")
+            for rec in result.recommendations:
+                typer.echo(f"  - {rec}")
+
+        if fail_on_issues and not result.passed:
+            raise typer.Exit(code=1)
+
+    except EnlaceError as e:
+        logger.error(str(e))
+        typer.secho(f"✗ Error: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def batch(
+    input_dir: Path = typer.Argument(..., help="Directory containing papers"),
+    output_dir: Path = typer.Option(Path("batch_output"), "--output", "-o", help="Output directory"),
+    workers: int = typer.Option(4, "--workers", "-w", help="Number of parallel workers"),
+    augment: bool = typer.Option(False, "--augment", help="Enable semantic augmentation"),
+    validate: bool = typer.Option(True, "--validate/--no-validate", help="Run validation after extraction"),
+    config_file: Optional[Path] = typer.Option(None, "--config", "-c", help="Configuration file"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+):
+    """Process multiple papers in batch."""
+    try:
+        setup_logging(verbose=verbose)
+
+        from enlace.core.batch import BatchProcessor
+
+        processor = BatchProcessor(
+            output_dir=output_dir,
+            workers=workers,
+            enable_augmentation=augment,
+            enable_validation=validate,
+            config_file=config_file,
+        )
+
+        summary = processor.process(input_dir)
+        summary.save(output_dir)
+
+        typer.secho(f"✓ Batch processing complete", fg=typer.colors.GREEN)
+        typer.echo(f"  Papers processed: {summary.papers_processed}")
+        typer.echo(f"  Successful: {summary.papers_successful}")
+        typer.echo(f"  Failed: {summary.papers_failed}")
+        typer.echo(f"  Total tables: {summary.total_tables}")
+        typer.echo(f"  Output: {output_dir}")
+
+    except EnlaceError as e:
+        logger.error(str(e))
+        typer.secho(f"✗ Error: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+
+def main():
+    """CLI entry point."""
+    app()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### 4.2 Update `pyproject.toml` with CLI Entry Points
+
+```toml
+[project.scripts]
+enlace = "enlace.cli.main:main"
+```
+
+---
+
+## **Phase 5: Configuration Management**
+
+### 5.1 Centralize Configuration with Priority Loading
+
+```python
+# src/core/config.py
+"""Centralized configuration management with priority loading."""
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
+from typing import Any
+import tomllib
+import os
+
+class ExtractionConfig(BaseSettings):
+    """Configuration for paper extraction.
+
+    Configuration is loaded with the following priority (later overrides earlier):
+    1. Default values (defined in field defaults)
+    2. Configuration file (.enlace.toml or pyproject.toml)
+    3. Environment variables (prefixed with ENLACE_)
+    4. Command-line arguments (passed to load_config)
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="ENLACE_",
+        case_sensitive=False,
+        extra="ignore"
+    )
+
+    # Document processing
+    enable_ocr: bool = Field(default=False, description="Enable OCR for scanned documents")
+    extract_figures: bool = Field(default=True, description="Extract figures from papers")
+    extract_tables: bool = Field(default=True, description="Extract tables from papers")
+    extract_metadata: bool = Field(default=True, description="Extract metadata from papers")
+
+    # Semantic augmentation
+    enable_augmentation: bool = Field(default=False, description="Enable semantic augmentation with RAG")
+    embedding_model: str = Field(
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        description="HuggingFace embedding model for RAG"
+    )
+    llm_model: str = Field(
+        default="claude-3-5-sonnet",  # Stable model name without date
+        description="LLM model for semantic extraction"
+    )
+
+    # Output
+    output_format: str = Field(default="json", description="Output format: json, csv, or both")
+    output_dir: Path = Field(default=Path("output"), description="Output directory for results")
+
+    # Performance
+    batch_size: int = Field(default=10, description="Batch size for processing")
+    max_workers: int = Field(default=4, description="Maximum parallel workers")
+
+    # Logging
+    verbose: bool = Field(default=False, description="Enable verbose logging")
+    log_file: Path | None = Field(default=None, description="Optional log file path")
+
+    @classmethod
+    def load_config(
+        cls,
+        config_file: Path | None = None,
+        **cli_args: Any
+    ) -> "ExtractionConfig":
+        """Load configuration with priority: defaults < file < env < CLI args.
+
+        Args:
+            config_file: Optional path to .toml configuration file
+            **cli_args: Command-line arguments (highest priority)
+
+        Returns:
+            Loaded configuration instance
+
+        Raises:
+            ConfigError: If configuration file is invalid
+        """
+        # 1. Defaults are handled by pydantic Field defaults
+
+        # 2. Load from config file
+        file_config = {}
+        if config_file and config_file.exists():
+            try:
+                with open(config_file, "rb") as f:
+                    data = tomllib.load(f)
+
+                # Support both .enlace.toml and pyproject.toml
+                if "tool" in data and "enlace" in data["tool"]:
+                    file_config = data["tool"]["enlace"]
+                else:
+                    file_config = data
+            except Exception as e:
+                from enlace.exceptions import ConfigError
+                raise ConfigError(f"Invalid config file {config_file}: {e}") from e
+
+        # 3. Environment variables are handled automatically by BaseSettings
+
+        # 4. CLI args (highest priority) - filter out None values
+        cli_config = {k: v for k, v in cli_args.items() if v is not None}
+
+        # Merge and instantiate (later overrides earlier)
+        return cls(**{**file_config, **cli_config})
+
+
+class ValidationConfig(BaseSettings):
+    """Configuration for validation."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="ENLACE_VALIDATION_",
+        case_sensitive=False
+    )
+
+    level: str = Field(default="standard", description="Validation level name")
+    output_dir: Path = Field(default=Path("validation_reports"), description="Output directory for reports")
+    fail_on_issues: bool = Field(default=False, description="Exit with error code if issues found")
+
+    # Configurable validation levels
+    levels: dict[str, list[str]] = Field(
+        default={
+            "quick": ["structure", "completeness"],
+            "standard": ["structure", "completeness", "accuracy", "missing_data"],
+            "comprehensive": [
+                "structure",
+                "completeness",
+                "accuracy",
+                "statistical_consistency",
+                "missing_data",
+                "semantic_validation"
+            ],
+        },
+        description="Mapping of level names to validation check lists"
+    )
+
+    # Logging
+    verbose: bool = Field(default=False, description="Enable verbose logging")
+
+    @classmethod
+    def load_config(
+        cls,
+        config_file: Path | None = None,
+        **cli_args: Any
+    ) -> "ValidationConfig":
+        """Load validation configuration with priority."""
+        file_config = {}
+        if config_file and config_file.exists():
+            try:
+                with open(config_file, "rb") as f:
+                    data = tomllib.load(f)
+
+                if "tool" in data and "enlace" in data["tool"] and "validation" in data["tool"]["enlace"]:
+                    file_config = data["tool"]["enlace"]["validation"]
+            except Exception as e:
+                from enlace.exceptions import ConfigError
+                raise ConfigError(f"Invalid config file {config_file}: {e}") from e
+
+        cli_config = {k: v for k, v in cli_args.items() if v is not None}
+        return cls(**{**file_config, **cli_config})
+
+    def get_checks_for_level(self, level: str | None = None) -> list[str]:
+        """Get validation checks for specified level."""
+        level = level or self.level
+        if level not in self.levels:
+            from enlace.exceptions import ConfigError
+            raise ConfigError(
+                f"Unknown validation level: {level}. "
+                f"Available levels: {', '.join(self.levels.keys())}"
+            )
+        return self.levels[level]
+```
+
+### 5.2 Example Configuration File
+
+```toml
+# .enlace.toml or [tool.enlace] in pyproject.toml
+
+[tool.enlace]
+enable_ocr = false
+enable_augmentation = false
+output_format = "json"
+output_dir = "extracted_data"
+max_workers = 8
+
+# LLM configuration
+llm_model = "claude-3-5-sonnet"
+embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+
+[tool.enlace.validation]
+level = "comprehensive"
+output_dir = "validation_reports"
+fail_on_issues = true
+
+# Custom validation levels
+[tool.enlace.validation.levels]
+quick = ["structure", "completeness"]
+thorough = ["structure", "completeness", "accuracy", "statistical_consistency", "missing_data", "semantic_validation"]
+```
+
+---
+
+## **Phase 6: Testing Migration**
+
+### 6.1 Testing Framework and Structure
+
+**Testing tools:**
+
+- Framework: `pytest>=8.0.0`
+- Coverage: `pytest-cov>=6.0.0`
+- Async support: `pytest-asyncio>=0.23.0`
+- Mocking: `pytest-mock>=3.12.0`
+
+**Test structure:**
+
+```text
+tests/
+├── fixtures/                     # Test data and fixtures
+│   ├── papers/                   # Sample PDF/DOCX files
+│   │   ├── sample_rct.pdf
+│   │   ├── sample_regression.pdf
+│   │   └── scanned_paper.pdf
+│   ├── expected/                 # Expected output files
+│   │   ├── sample_rct_extraction.json
+│   │   └── sample_regression_tables.json
+│   └── conftest.py              # Shared fixtures
+│
+├── core/
+│   ├── test_extractor.py        # PaperExtractor tests
+│   ├── test_parser.py           # TableParser tests
+│   ├── test_validator.py        # ExtractionValidator tests
+│   ├── test_config.py           # Configuration loading tests
+│   └── test_metadata.py         # Metadata extraction tests
+│
+├── semantic/
+│   ├── test_search.py           # Semantic search tests
+│   ├── test_augmenter.py        # Table augmentation tests
+│   └── test_extractors.py       # Context extractor tests
+│
+├── validators/
+│   ├── test_structure.py        # Structure validation tests
+│   ├── test_completeness.py     # Completeness tests
+│   ├── test_accuracy.py         # Accuracy tests
+│   ├── test_statistical.py      # Statistical consistency tests
+│   └── test_missing_data.py     # Missing data tests
+│
+├── cli/
+│   ├── test_cli.py              # CLI command tests
+│   └── test_batch.py            # Batch processing tests
+│
+├── integration/
+│   ├── test_end_to_end.py       # Full pipeline tests
+│   └── test_batch_processing.py # Batch workflow tests
+│
+└── conftest.py                   # Root fixtures and configuration
+```
+
+### 6.2 Testing Strategy
+
+**Unit Tests (Fast, Mocked Dependencies):**
+
+```python
+# tests/core/test_extractor.py
+"""Unit tests for PaperExtractor."""
+import pytest
+from pathlib import Path
+from unittest.mock import Mock, patch, MagicMock
+
+from enlace.core.extractor import PaperExtractor
+from enlace.core.config import ExtractionConfig
+from enlace.models.extraction import ExtractionResult
+from enlace.exceptions import PaperNotFoundError, UnsupportedFormatError
+
+
+@pytest.fixture
+def config():
+    """Extraction configuration for tests."""
+    return ExtractionConfig(
+        enable_ocr=False,
+        enable_augmentation=False,
+        output_dir=Path("test_output")
+    )
+
+
+@pytest.fixture
+def extractor(config):
+    """PaperExtractor instance."""
+    return PaperExtractor(config)
+
+
+class TestPaperExtractor:
+    """Tests for PaperExtractor class."""
+
+    def test_init(self, extractor, config):
+        """Test extractor initialization."""
+        assert extractor.config == config
+        assert extractor.parser is not None
+
+    def test_extract_nonexistent_paper_raises_error(self, extractor):
+        """Test that extracting nonexistent paper raises PaperNotFoundError."""
+        nonexistent = Path("nonexistent.pdf")
+        with pytest.raises(PaperNotFoundError):
+            extractor.extract(nonexistent)
+
+    def test_extract_unsupported_format_raises_error(self, extractor, tmp_path):
+        """Test that unsupported file format raises UnsupportedFormatError."""
+        unsupported = tmp_path / "paper.txt"
+        unsupported.write_text("content")
+
+        with pytest.raises(UnsupportedFormatError) as exc_info:
+            extractor.extract(unsupported)
+
+        assert ".txt" in str(exc_info.value)
+
+    @patch("enlace.core.extractor.TableParser")
+    @patch("enlace.utils.docling_utils.convert_pdf_to_markdown")
+    def test_extract_success(
+        self,
+        mock_convert,
+        mock_parser_class,
+        extractor,
+        tmp_path
+    ):
+        """Test successful extraction."""
+        # Setup
+        pdf_file = tmp_path / "paper.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4 fake pdf")
+
+        mock_convert.return_value = tmp_path / "paper.md"
+        mock_parser = Mock()
+        mock_parser_class.return_value = mock_parser
+        mock_parser.parse_tables.return_value = []
+
+        # Execute
+        result = extractor.extract(pdf_file)
+
+        # Verify
+        assert isinstance(result, ExtractionResult)
+        assert result.paper_id == "paper"
+        mock_convert.assert_called_once_with(pdf_file)
+
+    def test_augment_disabled(self, extractor, tmp_path):
+        """Test that augmentation is skipped when disabled."""
+        extraction = ExtractionResult(
+            paper_id="test",
+            source_file=tmp_path / "test.pdf",
+            extraction_quality=0.8
+        )
+
+        result = extractor.augment(extraction)
+
+        assert result == extraction  # Should return unchanged
+```
+
+**Integration Tests (Real Components, Test Data):**
+
+```python
+# tests/integration/test_end_to_end.py
+"""End-to-end integration tests."""
+import pytest
+from pathlib import Path
+
+from enlace.core.extractor import PaperExtractor
+from enlace.core.validator import ExtractionValidator
+from enlace.core.config import ExtractionConfig, ValidationConfig
+
+
+@pytest.mark.integration
+class TestEndToEnd:
+    """End-to-end extraction and validation tests."""
+
+    @pytest.fixture
+    def sample_paper(self):
+        """Path to sample RCT paper."""
+        return Path("tests/fixtures/papers/sample_rct.pdf")
+
+    @pytest.fixture
+    def expected_extraction(self):
+        """Expected extraction output."""
+        import json
+        with open("tests/fixtures/expected/sample_rct_extraction.json") as f:
+            return json.load(f)
+
+    def test_extract_and_validate(self, sample_paper, tmp_path):
+        """Test full extraction and validation pipeline."""
+        # Extract
+        config = ExtractionConfig(
+            enable_ocr=False,
+            enable_augmentation=False,
+            output_dir=tmp_path
+        )
+        extractor = PaperExtractor(config)
+        extraction = extractor.extract(sample_paper)
+
+        # Verify extraction
+        assert extraction.tables_extracted > 0
+        assert extraction.extraction_quality > 0.5
+
+        # Validate
+        val_config = ValidationConfig(level="comprehensive")
+        validator = ExtractionValidator(val_config)
+        validation = validator.validate(extraction)
+
+        # Verify validation
+        assert validation.passed
+        assert validation.score > 0.7
+        assert len(validation.issues) == 0
+
+    def test_batch_processing(self, tmp_path):
+        """Test batch processing of multiple papers."""
+        from enlace.core.batch import BatchProcessor
+
+        papers_dir = Path("tests/fixtures/papers")
+        processor = BatchProcessor(
+            output_dir=tmp_path,
+            workers=2,
+            enable_augmentation=False,
+        )
+
+        summary = processor.process(papers_dir)
+
+        assert summary.papers_successful > 0
+        assert summary.total_tables > 0
+```
+
+**Fixtures and Mocking:**
+
+```python
+# tests/conftest.py
+"""Shared test fixtures and configuration."""
+import pytest
+from pathlib import Path
+from unittest.mock import Mock, MagicMock
+
+
+@pytest.fixture(scope="session")
+def fixtures_dir():
+    """Path to test fixtures directory."""
+    return Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture(scope="session")
+def sample_papers_dir(fixtures_dir):
+    """Path to sample papers directory."""
+    return fixtures_dir / "papers"
+
+
+@pytest.fixture
+def mock_llm_client():
+    """Mock LLM client for testing semantic augmentation."""
+    mock = MagicMock()
+    mock.generate.return_value = {
+        "variable_context": {"definition": "Sample definition"},
+        "confidence": 0.85
+    }
+    return mock
+
+
+@pytest.fixture
+def mock_embedding_model():
+    """Mock embedding model for testing semantic search."""
+    mock = MagicMock()
+    mock.encode.return_value = [[0.1, 0.2, 0.3]]  # Mock embedding
+    return mock
+```
+
+### 6.3 Coverage Goals
+
+- **Overall coverage target:** >80%
+- **Core modules:** >90% (extractor, parser, validator)
+- **CLI:** >70% (focus on command logic, not typer internals)
+- **Validators:** >85% (each check module)
+
+### 6.4 Testing Commands
+
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=src --cov-report=term-missing --cov-report=html
+
+# Run only unit tests
+uv run pytest -m unit
+
+# Run only integration tests
+uv run pytest -m integration
+
+# Run specific test file
+uv run pytest tests/core/test_extractor.py -v
+
+# Run with verbose output
+uv run pytest -vv
+
+# Run and stop on first failure
+uv run pytest -x
+```
+
+---
+
+## **Phase 7: Documentation & Examples**
+
+### 7.1 Create User Documentation
+
+**Files to create:**
+
+1. **`docs/CLI_GUIDE.md`** - Command-line usage
+   - Installation instructions
+   - Basic commands (extract, validate, batch)
+   - Configuration file examples
+   - Environment variable reference
+
+2. **`docs/API_GUIDE.md`** - Python API usage
+   - Programmatic usage examples
+   - API reference for main classes
+   - Error handling guide
+   - Advanced workflows
+
+3. **`docs/CONFIGURATION.md`** - Configuration options
+   - Complete config file reference
+   - Configuration priority explanation
+   - Environment variable listing
+   - Validation level customization
+
+4. **`docs/DEVELOPMENT.md`** - Development guide
+   - Setting up development environment
+   - Running tests
+   - Code style guidelines
+   - Contributing workflow
+
+### 7.2 Add Examples
+
+```python
+# examples/basic_extraction.py
+"""Basic paper extraction example."""
+from pathlib import Path
+from enlace.core.extractor import PaperExtractor
+from enlace.core.config import ExtractionConfig
+
+# Configure extraction
+config = ExtractionConfig(
+    enable_ocr=False,
+    enable_augmentation=False,
+    output_format="json"
+)
+
+# Extract from single paper
+extractor = PaperExtractor(config)
+result = extractor.extract(Path("paper.pdf"))
+
+# Access results
+print(f"Extracted {len(result.tables)} tables")
+for table in result.tables:
+    print(f"  - {table.title} ({table.table_type})")
+
+# Save to file
+result.save(Path("output"))
+```
+
+```python
+# examples/semantic_augmentation.py
+"""Semantic augmentation example."""
+from pathlib import Path
+from enlace.core.extractor import PaperExtractor
+from enlace.core.config import ExtractionConfig
+
+# Enable semantic augmentation
+config = ExtractionConfig(
+    enable_augmentation=True,
+    llm_model="claude-4-5-sonnet",
+    embedding_model="sentence-transformers/all-MiniLM-L6-v2"
+)
+
+extractor = PaperExtractor(config)
+
+# Extract and augment
+result = extractor.extract(Path("paper.pdf"))
+augmented = extractor.augment(result)
+
+# Access semantic context
+for table in augmented.tables:
+    if hasattr(table, "study_context"):
+        print(f"Study context: {table.study_context}")
+```
+
+```python
+# examples/custom_validation.py
+"""Custom validation configuration example."""
+from pathlib import Path
+from enlace.core.validator import ExtractionValidator
+from enlace.core.config import ValidationConfig
+
+# Create custom validation level
+config = ValidationConfig(
+    level="custom",
+    levels={
+        "custom": ["structure", "accuracy", "semantic_validation"]
+    }
+)
+
+validator = ExtractionValidator(config)
+result = validator.validate(Path("output/paper/extraction.json"))
+
+if not result.passed:
+    print("Validation failed:")
+    for issue in result.issues:
+        print(f"  - {issue}")
+```
+
+```python
+# examples/batch_processing.py
+"""Batch processing example."""
+from pathlib import Path
+from enlace.core.batch import BatchProcessor
+
+processor = BatchProcessor(
+    output_dir=Path("batch_output"),
+    workers=4,
+    enable_augmentation=True,
+    enable_validation=True
+)
+
+# Process directory of papers
+summary = processor.process(Path("papers/"))
+
+print(f"Processed {summary.papers_successful}/{summary.papers_processed} papers")
+print(f"Total tables: {summary.total_tables}")
+print(f"Average quality: {summary.avg_quality:.2f}")
+```
+
+---
+
+## **Phase 8: Packaging & Distribution**
+
+### 8.1 Update Package Metadata
+
+```toml
+# pyproject.toml
+[project]
+name = "enlace"
+version = "0.1.0"
+description = "Extract and harmonize data from development economics research papers"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+keywords = ["research", "meta-analysis", "data-extraction", "economics", "rct"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "altair>=5.5.0",
+    "chromadb>=0.5.23",
+    "docling>=2.60.1",
+    "duckdb>=1.1.3",
+    "ipykernel>=6.29.5",
+    "jupyter>=1.1.1",
+    "langchain>=0.3.22",
+    "langchain-anthropic>=0.3.9",
+    "langchain-chroma>=0.2.2",
+    "langchain-huggingface>=0.1.4",
+    "langchain-text-splitters>=1.0.0",
+    "pandas>=2.2.3",
+    "pydantic>=2.12.4",
+    "pydantic-settings>=2.0.0",  # For configuration management
+    "sentence-transformers>=3.4.0",
+    "typer>=0.12.0",  # For CLI
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.12.0",
+    "codespell>=2.4.1",
+    "pre-commit>=4.2.0",
+    "ruff>=0.7.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/enlace"
+Documentation = "https://enlace.readthedocs.io"
+Repository = "https://github.com/yourusername/enlace"
+Issues = "https://github.com/yourusername/enlace/issues"
+
+[project.scripts]
+enlace = "enlace.cli.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/enlace"]
+
+[tool.ruff]
+line-length = 88
+fix = true
+target-version = "py312"
+exclude = [".venv", "tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "D", "UP", "SIM"]
+ignore = [
+    "D105", "D100", "D104",
+    "D203", "D213",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--strict-markers"
+markers = [
+    "unit: Fast unit tests with mocked dependencies",
+    "integration: Integration tests with real components",
+    "slow: Tests that take longer to run",
+]
+```
+
+### 8.2 Installation and Distribution
+
+```bash
+# Install from source (development)
+uv pip install -e .
+
+# Install with dev dependencies
+uv pip install -e ".[dev]"
+
+# Build distribution
+uv build
+
+# Test installation
+uv pip install dist/enlace-0.1.0-py3-none-any.whl
+
+# Publish to PyPI (future)
+uv publish
+```
+
+---
+
+## **Migration Checklist**
+
+### Phase 1: Architecture (Foundation) ✅ COMPLETED
+
+**Completion Date:** 2025-11-07
+
+**Summary:** Created foundational architecture with 867 lines of production-ready code across 12 new files. All files formatted and linted with zero errors.
+
+**Files Created:**
+
+- `src/exceptions.py` (81 lines) - Complete exception hierarchy
+- `src/utils/logging.py` (48 lines) - Centralized logging with file/console output
+- `src/models/tables.py` (367 lines) - All table models migrated from parse.py
+- `src/models/figures.py` (44 lines) - Figure extraction model
+- `src/models/extraction.py` (136 lines) - ExtractionResult with JSON/CSV save methods
+- `src/models/validation.py` (133 lines) - Validation models with save methods
+- `src/models/__init__.py` (42 lines) - Package exports
+- `src/core/__init__.py`, `src/semantic/__init__.py`, `src/validators/__init__.py`, `src/utils/__init__.py`, `src/cli/__init__.py` - Package initialization files
+
+**Completed Tasks:**
+
+- [x] Create new directory structure (`src/core/`, `src/semantic/`, `src/models/`, `src/validators/`, `src/cli/`, `src/utils/`)
+- [x] Create `src/exceptions.py` with custom exception hierarchy
+- [x] Create `src/utils/logging.py` with centralized logging
+- [x] Move Pydantic models from `parse.py` to `src/models/tables.py`
+- [x] Create `src/models/extraction.py` (ExtractionResult, PaperMetadata)
+- [x] Create `src/models/validation.py` (ValidationResult, CheckResult)
+- [x] Create `src/models/figures.py` (Figure model from parse.py)
+- [x] Create `__init__.py` files for all packages with proper exports
+- [x] Format and lint all new files with ruff (0 errors)
+- [x] Map all existing files to new locations (see consolidation table)
+
+**Key Features Implemented:**
+
+- Custom exception hierarchy with 8 exception classes
+- Configurable logging with console and file output
+- 13 Pydantic data models (7 table models, 6 validation models)
+- ExtractionResult.save() method supporting JSON and CSV export
+- ValidationResult.save() method for validation reports
+- BatchValidationResult for batch processing support
+- All semantic augmentation fields preserved in models
+
+### Phase 2: Content Extractor
+
+- [ ] Create `src/core/extractor.py` with PaperExtractor class
+- [ ] Migrate ContentExtractor logic with proper error handling
+- [ ] Create `src/utils/docling_utils.py` with convert_pdf_to_markdown()
+- [ ] Create `src/core/parser.py` from AcademicTableExtractor
+- [ ] Create `src/core/metadata.py` for metadata extraction
+- [ ] Update all imports to use new module structure
+- [ ] Add unit tests for extractor module
+
+### Phase 3: Data Quality Checker
+
+- [ ] Create `src/core/validator.py` with ExtractionValidator
+- [ ] Move DataQualityChecker logic with configurable validation levels
+- [ ] Create `src/validators/` package structure
+- [ ] Implement `src/validators/structure.py`
+- [ ] Implement `src/validators/completeness.py`
+- [ ] Implement `src/validators/accuracy.py`
+- [ ] Implement `src/validators/statistical.py`
+- [ ] Implement `src/validators/missing_data.py`
+- [ ] Move semantic_validator.py to `src/validators/semantic.py`
+- [ ] Add unit tests for validator and all check modules
+
+### Phase 4: CLI
+
+- [ ] Create `src/cli/` package
+- [ ] Implement `src/cli/main.py` with typer commands
+- [ ] Implement extract command with all options
+- [ ] Implement validate command with all options
+- [ ] Implement batch command
+- [ ] Add CLI tests with mocked components
+- [ ] Add CLI entry point to pyproject.toml
+- [ ] Test CLI commands manually
+
+### Phase 5: Configuration
+
+- [ ] Create `src/core/config.py` with ExtractionConfig
+- [ ] Add ValidationConfig to config module
+- [ ] Implement load_config() with priority loading
+- [ ] Add pydantic-settings dependency
+- [ ] Create example `.enlace.toml` configuration file
+- [ ] Update CLAUDE.md with configuration documentation
+- [ ] Add configuration tests (priority, validation, env vars)
+
+### Phase 6: Testing
+
+- [ ] Create `tests/fixtures/` directory with sample data
+- [ ] Add sample PDF papers for testing
+- [ ] Add expected output JSON files
+- [ ] Create `tests/conftest.py` with shared fixtures
+- [ ] Write unit tests for core modules (>90% coverage)
+- [ ] Write unit tests for validators (>85% coverage)
+- [ ] Write integration tests for end-to-end workflows
+- [ ] Set up pytest-cov for coverage reporting
+- [ ] Achieve >80% overall test coverage
+
+### Phase 7: Documentation
+
+- [ ] Write `docs/CLI_GUIDE.md`
+- [ ] Write `docs/API_GUIDE.md`
+- [ ] Write `docs/CONFIGURATION.md`
+- [ ] Write `docs/DEVELOPMENT.md`
+- [ ] Create `examples/basic_extraction.py`
+- [ ] Create `examples/batch_processing.py`
+- [ ] Create `examples/custom_validation.py`
+- [ ] Create `examples/semantic_augmentation.py`
+- [ ] Update README.md with installation and quick start
+
+### Phase 8: Packaging
+
+- [ ] Update pyproject.toml with complete metadata
+- [ ] Add pydantic-settings and typer to dependencies
+- [ ] Add build configuration (hatchling)
+- [ ] Test installation with `uv pip install -e .`
+- [ ] Test CLI with `enlace --help`
+- [ ] Build distribution with `uv build`
+- [ ] Test installed wheel file
+- [ ] Create GitHub release workflow (optional)
+
+---
+
+## **Benefits of This Migration**
+
+1. **Standalone Package**: Can be installed and used without Claude Code or AI agents
+2. **Clear API**: Well-defined Python API with type hints and documentation
+3. **CLI Tool**: Easy command-line interface for end users and researchers
+4. **Testable**: Separated concerns enable comprehensive unit and integration testing
+5. **Maintainable**: Organized code structure with clear module boundaries
+6. **Extensible**: Easy to add new extractors, validators, or output formats
+7. **Publishable**: Ready for PyPI distribution and open source community
+8. **Robust**: Proper error handling, logging, and validation throughout
+9. **Configurable**: Flexible configuration system with priority loading
+10. **Production-Ready**: Designed for reliability and enterprise use
+
+---
+
+## **Backward Compatibility**
+
+To maintain backward compatibility with existing subagents during migration:
+
+```python
+# .claude/subagents/content-extractor/extractor.py (wrapper)
+"""Compatibility wrapper for content-extractor subagent.
+
+This module provides backward compatibility by wrapping the new
+enlace.core.extractor module.
+"""
+import sys
+from pathlib import Path
+
+# Add src to path for imports
+src_path = Path(__file__).resolve().parents[3] / "src"
+sys.path.insert(0, str(src_path))
+
+# Import new implementation
+from enlace.core.extractor import PaperExtractor
+from enlace.core.config import ExtractionConfig
+
+# Alias for backward compatibility
+ContentExtractor = PaperExtractor
+
+# For direct script execution, maintain original CLI
+if __name__ == "__main__":
+    import asyncio
+    from enlace.cli.main import extract
+    asyncio.run(extract())
+```
+
+---
+
+## **Implementation Notes**
+
+### Dependencies to Add
+
+```toml
+[project]
+dependencies = [
+    # ... existing dependencies ...
+    "typer>=0.12.0",           # CLI framework
+    "pydantic-settings>=2.0.0", # Configuration management
+]
+
+[project.optional-dependencies]
+dev = [
+    # ... existing dev dependencies ...
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.12.0",
+]
+```
+
+### Import Path Changes
+
+After reorganization, the package uses the name `enlace`:
+
+**Before:**
+
+```python
+from src.parse import AcademicTableExtractor, RegressionTable
+from src.semantic_search import SemanticSearch
+from src.augmentation_config import AugmentationConfig
+```
+
+**After:**
+
+```python
+from enlace.core.parser import TableParser
+from enlace.models.tables import RegressionTable
+from enlace.semantic.search import SemanticSearch
+from enlace.core.config import ExtractionConfig
+```
+
+### Configuration Priority
+
+Configuration is loaded in this order (later takes precedence):
+
+1. **Default values** - Defined in Pydantic Field defaults
+2. **Configuration file** - `.enlace.toml` or `[tool.enlace]` in `pyproject.toml`
+3. **Environment variables** - Prefixed with `ENLACE_` (e.g., `ENLACE_ENABLE_AUGMENTATION=true`)
+4. **Command-line arguments** - Passed directly to CLI commands
+
+### LLM Model Naming
+
+Use stable model names without version dates:
+
+- `claude-4-5-sonnet` instead of `claude-4-5-sonnet-20241022`
+- `gpt-4` instead of `gpt-4-0125-preview`
+
+This prevents configuration from becoming brittle when model versions change.
+
+---
+
+This plan provides a clear, precise path to transform the AI-agent-dependent code into a professional, standalone Python package while maintaining all existing functionality and enabling future growth as a distributable research tool.
