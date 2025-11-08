@@ -4,6 +4,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from pydantic import BaseModel, Field
+
 from enlace.exceptions import ExtractionError
 from enlace.models.figures import Figure
 from enlace.models.tables import (
@@ -11,7 +13,6 @@ from enlace.models.tables import (
     RegressionTable,
     SummaryStatisticsTable,
 )
-from pydantic import BaseModel, Field
 
 
 class PaperMetadata(BaseModel):

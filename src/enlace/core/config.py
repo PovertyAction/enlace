@@ -9,9 +9,10 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from enlace.exceptions import ConfigError
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from enlace.exceptions import ConfigError
 
 
 class ExtractionConfig(BaseSettings):

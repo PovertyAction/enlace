@@ -14,6 +14,7 @@ from docling.document_converter import (
     DocumentConverter,
     PdfFormatOption,
 )
+
 from enlace.exceptions import ExtractionError, UnsupportedFormatError
 
 logger = logging.getLogger("enlace.utils.docling")

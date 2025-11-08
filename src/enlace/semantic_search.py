@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import chromadb
+from augmentation_config import AugmentationConfig
 from chromadb.config import Settings
 from langchain_anthropic import ChatAnthropic
 from langchain_chroma import Chroma
@@ -18,8 +19,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
-
-from augmentation_config import AugmentationConfig
 
 logger = logging.getLogger(__name__)
 

@@ -5,8 +5,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from enlace.exceptions import ValidationError
 from pydantic import BaseModel, Field
+
+from enlace.exceptions import ValidationError
 
 
 class ValidationIssue(BaseModel):

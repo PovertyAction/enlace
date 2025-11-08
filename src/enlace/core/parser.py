@@ -15,6 +15,7 @@ from docling.document_converter import (
     PdfFormatOption,
 )
 from docling_core.types.doc import DoclingDocument, PictureItem, TableCell
+
 from enlace.models.figures import Figure
 from enlace.models.tables import (
     BalanceStatistic,
