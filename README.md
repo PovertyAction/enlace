@@ -1,234 +1,305 @@
 # enlace
 
-Tools for parsing research papers and connecting to underlying microdata for data
-harmonizations and meta-analysis
+**Extract and validate research paper data for meta-analysis and data harmonization**
+
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 
-The purpose of this repository is to provide tools and documentation to help
-researchers working in development economics to more easily parse research papers,
-extract relevant information, and connect to underlying microdata for data
-harmonization and meta-analysis. The repository includes code for automating the
-extraction of study characteristics, outcome measures, and statistical results from
-research papers, as well as tools for linking these extracted data to existing
-datasets and harmonizing variables across studies.
+enlace is a Python package for extracting structured data from development economics research papers. It automatically extracts tables (regression results, summary statistics, balance tables), figures, and metadata from PDF/DOCX papers, with optional semantic augmentation for enhanced context and error detection.
 
-## Components
+### Key Features
 
-- **Paper Parsing**: Scripts and models for extracting structured data from research
-  papers in PDF or DOCX format using docling.
-- **Semantic Augmentation** (NEW): RAG-based system that enhances table extraction
-  with semantic context from paper text, helping with data harmonization and error detection.
-- **Microdata Linking**: Tools for connecting extracted study information to
-  underlying microdata sources.
-- **Data Harmonization**: Functions for standardizing variables and outcomes across
-  studies to facilitate meta-analysis.
+- **Automated Table Extraction** - Regression tables, summary statistics, balance tables
+- **Figure Extraction** - Extract and save figures from papers
+- **Metadata Extraction** - Title, authors, year, DOI, citations, methodology
+- **OCR Support** - Hybrid OCR with Tesseract + EasyOCR fallback for scanned documents
+- **Semantic Augmentation** - RAG-based context extraction using LLMs
+- **Data Validation** - Comprehensive quality checks with configurable validation levels
+- **Batch Processing** - Parallel processing of multiple papers
+- **CLI + Python API** - Use from command line or integrate into your code
 
-## Development set up
+## Installation
 
-Development relies on the following software
+### Prerequisites
 
-- `winget` (Windows) or `homebrew` (MacOS/Linux) or `snap` (Linux) for package management and installation
-- `git` for source control management
-- `just` for running common command line patterns
-- `uv` for installing Python and managing virtual environments
+- Python 3.12 or higher
+- [uv](https://github.com/astral-sh/uv) (recommended) or pip
 
-This repository uses a `Justfile` for collecting common command line actions that we run
-to set up the computing environment and build the assets of the handbook. Note that you
-should also have Git installed
-
-To get started, make sure you have `Just` installed on your computer by running the
-following from the command line:
-
-| Platform  | Commands                                                            |
-| --------- | ------------------------------------------------------------------- |
-| Windows   | `winget install Git.Git Casey.Just astral-sh.uv GitHub.cli` |
-| Mac/Linux | `brew install just uv gh`                                          |
-
-This will make sure that you have the latest version of `Just`, as well as
-[uv](https://docs.astral.sh/uv/) (installer for Python).
-
-- We use `Just` in order to make it easier for all users to be productive with data
-  and technology systems. The goal of using a `Justfile` is to help make the end goal of
-  the user easier to achieve without needing to know or remember all of the technical
-  details of how we get to that goal.
-- We use `uv` to help ease use of Python. `uv` provides a global system for creating and
-  building computing environments for Python.
-- We use Quarto to allow users to focus on writing and data analytics. Writing in
-  markdown, jupyter notebooks, python scripts, R scripts, etc. makes it easier to
-  review, update, and deploy technical documentation.
-- We also recommend using in Integrated Development Environment (IDE).
-  Preferred options are `VS Code` or `Positron`.
-
-| Platform  | Commands                                                            |
-| --------- | ------------------------------------------------------------------- |
-| Windows   | `winget install Microsoft.VisualStudioCode`                         |
-| Mac       | `brew install --cask visual-studio-code`                            |
-| Linux     | `sudo snap install code --classic`                                  |
-
-| Platform  | Commands                                                            |
-| --------- | ------------------------------------------------------------------- |
-| Windows   | `winget install Posit.Positron`                                     |
-| Mac       | `brew install --cask positron`                                      |
-
-As a shortcut, if you already have `Just` installed, you can run the following to
-install required software and build a python virtual environment that is used to build
-the handbook pages:
+### Quick Install
 
 ```bash
+# Clone repository
+git clone https://github.com/yourusername/enlace.git
+cd enlace
+
+# Install with uv (recommended)
+uv pip install -e .
+
+# Or use just (installs uv and creates virtual environment)
 just get-started
 ```
 
-Note: you may need to restart your terminal after running the command above to activate
-the installed software.
+### Verify Installation
 
-After the required software is installed, you can activate the Python virtual
-environment:
-
-| Shell      | Commands                                |
-| ---------- | --------------------------------------- |
-| Bash       | `.venv/Scripts/activate`                |
-| Powershell | `.venv/Scripts/activate.ps1`            |
-| Nushell    | `overlay use .venv/Scripts/activate.nu` |
+```bash
+enlace --help
+```
 
 ## Quick Start
 
-### Install the Package
-
-For development, install the package in editable mode:
+### Extract from a Single Paper
 
 ```bash
-# Install in editable mode
-uv pip install -e .
+# Basic extraction
+enlace extract paper.pdf
 
-# Or use the just command
-just venv
+# With OCR for scanned documents
+enlace extract scanned_paper.pdf --ocr auto
+
+# With semantic augmentation (requires ANTHROPIC_API_KEY)
+export ANTHROPIC_API_KEY=your_api_key
+enlace extract paper.pdf --augment
+
+# Save as both JSON and CSV
+enlace extract paper.pdf --format both -o results/
 ```
 
-### Using the CLI
-
-The `enlace` CLI provides three main commands for extracting and validating research paper data.
-
-#### Extract Command
-
-Extract tables, figures, and metadata from a single research paper:
-
-```bash
-# Basic extraction (replace paper.pdf with the path to the paper you want to process)
-uv run enlace extract paper.pdf
-
-# With custom output directory
-uv run enlace extract paper.pdf -o output/
-
-# Enable semantic augmentation (adds context from paper text)
-# IMPORTANT: Requires ANTHROPIC_API_KEY environment variable
-# Option 1: Use .env file (recommended)
-cp .env.example .env  # Copy example file
-# Edit .env and add your API key, then:
-uv run enlace extract paper.pdf --augment
-
-# Option 2: Set environment variable directly
-export ANTHROPIC_API_KEY=your_api_key_here  # Linux/Mac
-set ANTHROPIC_API_KEY=your_api_key_here     # Windows CMD
-$env:ANTHROPIC_API_KEY="your_api_key_here"  # Windows PowerShell
-uv run enlace extract paper.pdf --augment
-
-# Enable OCR for scanned documents
-uv run enlace extract paper.pdf --ocr
-
-# Combine options with verbose output
-uv run enlace extract paper.pdf -o output/ --augment --verbose
-
-# Set custom logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-uv run enlace extract paper.pdf --log-level DEBUG
-
-# Export as CSV or both formats (CSV and JSON)
-uv run enlace extract paper.pdf --format csv
-uv run enlace extract paper.pdf --format both
-
-# Note: Logs are automatically saved to output/{paper_name}/logs/extraction.log
-# INFO level logs are always saved to file, console verbosity controlled by --verbose or --log-level
-```
-
-#### Output Structure
-
-After extraction, the output directory is organized as follows:
-
-```text
-output/
-└── {paper_name}/              # Named after input file (e.g., "paper" from "paper.pdf")
-    ├── extraction.json        # Complete extraction results in JSON format
-    ├── logs/                  # Log files
-    │   └── extraction.log     # Extraction logs (INFO level and above)
-    ├── tables/                # CSV exports of extracted tables (when using --format csv or both)
-    │   ├── regression_table_1.csv
-    │   ├── regression_table_2.csv
-    │   ├── summary_stats_table_1.csv
-    │   └── balance_table_1.csv
-    └── figures/               # Extracted figures as images
-        ├── figure_1.png
-        └── figure_2.png
-```
-
-**Notes:**
-
-- `extraction.json` always contains the complete extraction results including all metadata
-- `tables/` directory is only created when using `--format csv` or `--format both`
-- `figures/` directory contains extracted figures from the paper
-- `logs/` directory contains detailed extraction logs for debugging and review
-
-#### Validate Command
-
-Validate extracted data quality:
+### Validate Extraction Quality
 
 ```bash
 # Standard validation
-uv run enlace validate output/paper/extraction.json
+enlace validate output/paper/extraction.json
 
-# Quick validation (structure and completeness only)
-uv run enlace validate output/paper/extraction.json --level quick
+# Comprehensive validation with all checks
+enlace validate output/paper/extraction.json --level comprehensive
 
-# Comprehensive validation (all checks including semantic)
-uv run enlace validate output/paper/extraction.json --level comprehensive
-
-# Save validation report to custom directory
-uv run enlace validate output/paper/extraction.json -o reports/
-
-# Fail on issues (exit with error code if validation fails)
-uv run enlace validate output/paper/extraction.json --fail-on-issues
+# Fail on validation issues (useful for CI/CD)
+enlace validate output/paper/extraction.json --fail-on-issues
 ```
 
-#### Batch Command
-
-Process multiple papers in parallel:
+### Batch Processing
 
 ```bash
-# Process all papers in a directory
-uv run enlace batch papers/ -o batch_output/
+# Process all papers in directory
+enlace batch papers/ -o batch_output/
 
-# Use 8 parallel workers
-uv run enlace batch papers/ --workers 8
-
-# Enable semantic augmentation for all papers
-uv run enlace batch papers/ --augment
-
-# Skip validation after extraction
-uv run enlace batch papers/ --no-validate
-
-# Combine options
-uv run enlace batch papers/ -o output/ --workers 8 --augment --verbose
+# High-performance batch with validation
+enlace batch papers/ --workers 8 --validate --validation-level comprehensive
 ```
 
-#### Get Help
+### Python API
+
+```python
+from pathlib import Path
+from enlace.core.extractor import PaperExtractor
+from enlace.core.config import ExtractionConfig
+
+# Configure extraction
+config = ExtractionConfig(
+    enable_ocr=True,
+    enable_augmentation=False,
+    output_format="json"
+)
+
+# Extract from paper
+extractor = PaperExtractor(config)
+result = extractor.extract(Path("paper.pdf"))
+
+# Access results
+print(f"Extracted {len(result.tables)} tables")
+for table in result.tables:
+    print(f"  - {table.title} ({table.table_type})")
+
+# Save results
+result.save(Path("output"))
+```
+
+## Features
+
+### Table Extraction
+
+Automatically detects and extracts three types of tables:
+
+1. **Regression Tables** - Coefficients, standard errors, p-values, significance stars
+2. **Summary Statistics** - Mean, SD, min, max, N for multiple variables
+3. **Balance Tables** - Treatment vs. control group comparisons
+
+### OCR Support
+
+Hybrid OCR system for scanned documents:
+
+- **Auto mode** (default) - Tesseract primary + EasyOCR fallback
+- **Per-cell confidence** - Tracks OCR quality for each extracted value
+- **Automatic fallback** - Switches to EasyOCR when Tesseract confidence is low
+- **Numeric validation** - Detects common OCR errors (O↔0, l↔1, S↔5)
 
 ```bash
-# Show all commands
-uv run enlace --help
+# Use auto mode (Tesseract + EasyOCR fallback)
+enlace extract paper.pdf --ocr auto
 
-# Show help for specific command
-uv run enlace extract --help
-uv run enlace validate --help
-uv run enlace batch --help
+# Use specific backend
+enlace extract paper.pdf --ocr easyocr
+
+# Customize confidence threshold
+enlace extract paper.pdf --ocr auto --ocr-confidence 0.9
+```
+
+### Semantic Augmentation
+
+Enhance extractions with context from paper text using RAG:
+
+- **Variable Context** - Definitions, units, data sources
+- **Treatment Context** - Intervention details, implementation
+- **Sample Context** - Population characteristics, selection criteria
+- **Methods Context** - Estimation techniques, standard error types
+- **Cross-Validation** - Detects OCR errors by comparing to paper text
+- **Confidence Scores** - Quality metrics for extracted information
+
+**Requirement:** Semantic augmentation requires `ANTHROPIC_API_KEY` environment variable.
+
+```bash
+# Set API key
+export ANTHROPIC_API_KEY=your_api_key
+
+# Extract with augmentation
+enlace extract paper.pdf --augment
+```
+
+### Data Validation
+
+Configurable validation with three built-in levels:
+
+1. **Quick** - Structure and completeness checks (fastest)
+2. **Standard** - Quick + accuracy + missing data checks (recommended)
+3. **Comprehensive** - All checks including statistical consistency and OCR quality
+
+Custom validation levels can be defined in configuration files.
+
+```bash
+# Quick validation
+enlace validate output/paper/extraction.json --level quick
+
+# Custom validation with specific checks
+enlace validate output/paper/extraction.json --config .enlace.toml
+```
+
+### Batch Processing
+
+Process multiple papers in parallel with automatic validation:
+
+```bash
+# Process directory with 8 workers
+enlace batch papers/ --workers 8 --output batch_results/
+
+# Full pipeline with augmentation and validation
+enlace batch papers/ \
+    --augment \
+    --ocr auto \
+    --validate \
+    --validation-level comprehensive \
+    --workers 4
+```
+
+## Output Structure
+
+Extraction creates organized output directories:
+
+```text
+output/
+└── paper_id/
+    ├── extraction.json          # Complete extraction results
+    ├── extraction.csv           # CSV format (if --format csv or both)
+    ├── tables/                  # Individual table files
+    │   ├── table_1.json
+    │   ├── table_2.json
+    │   └── ...
+    ├── figures/                 # Extracted figures
+    │   ├── figure_1.png
+    │   └── figure_2.png
+    └── logs/                    # Extraction logs
+        └── extraction.log
+```
+
+## Configuration
+
+### Configuration File
+
+Create `.enlace.toml` in your project:
+
+```toml
+[tool.enlace]
+enable_ocr = true
+ocr_backend = "auto"
+ocr_confidence_threshold = 0.85
+enable_augmentation = true
+output_format = "both"
+max_workers = 8
+
+# LLM configuration
+llm_model = "claude-4-5-haiku"
+embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+
+[tool.enlace.validation]
+level = "comprehensive"
+fail_on_issues = true
+```
+
+### Environment Variables
+
+All options can be set via environment variables with `ENLACE_` prefix:
+
+```bash
+export ENLACE_ENABLE_OCR=true
+export ENLACE_OCR_BACKEND=auto
+export ENLACE_ENABLE_AUGMENTATION=true
+export ENLACE_OUTPUT_FORMAT=both
+export ENLACE_MAX_WORKERS=8
+export ANTHROPIC_API_KEY=your_api_key  # Required for augmentation
+```
+
+### Configuration Priority
+
+Later sources override earlier ones:
+
+1. Default values (built-in)
+2. Configuration file (`.enlace.toml` or `pyproject.toml`)
+3. Environment variables (`ENLACE_*`)
+4. Command-line arguments (highest priority)
+
+## Documentation
+
+- **[CLI Guide](docs/CLI_GUIDE.md)** - Complete command-line reference
+- **[API Guide](docs/API_GUIDE.md)** - Python API documentation
+- **[Configuration Guide](docs/CONFIGURATION.md)** - All configuration options
+- **[Development Guide](docs/DEVELOPMENT.md)** - Contributing and development setup
+- **[Benchmark Guide](docs/BENCHMARK_README.md)** - Benchmark testing system
+- **[Migration Plan](docs/MIGRATION_PLAN.md)** - Package architecture details
+
+### Examples
+
+See the [examples/](examples/) directory for complete working examples:
+
+- [basic_extraction.py](examples/basic_extraction.py) - Simple extraction example
+- [batch_processing.py](examples/batch_processing.py) - Batch processing workflows
+- [custom_validation.py](examples/custom_validation.py) - Custom validation levels
+- [semantic_augmentation.py](examples/semantic_augmentation.py) - Semantic context extraction
+
+## Development
+
+### Setup Development Environment
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/enlace.git
+cd enlace
+
+# Install with just (recommended)
+just get-started
+
+# Or manually
+uv pip install -e ".[dev]"
 ```
 
 ### Run Tests
@@ -238,34 +309,145 @@ uv run enlace batch --help
 uv run pytest
 
 # Run with coverage
-uv run pytest --cov=src --cov-report=term-missing
+uv run pytest --cov=src/enlace --cov-report=term-missing --cov-report=html
 
 # Run only unit tests (fast)
 uv run pytest -m unit
 
-# Run semantic augmentation tests
-uv run pytest tests/test_semantic*.py -v
+# Run benchmark tests
+uv run pytest tests/benchmark/ -v
 ```
 
-## Features
+### Code Quality
 
-### Semantic Table Augmentation (NEW)
+```bash
+# Format and lint (REQUIRED before committing)
+just fmt-python
+just lint-python
 
-The semantic augmentation system enhances table extraction by adding context from the paper text:
+# Run all pre-commit hooks
+just pre-commit-run
+```
 
-- **Variable Context**: Definitions, measurement units, data sources
-- **Treatment Context**: Intervention details, implementation
-- **Sample Context**: Population characteristics, selection criteria
-- **Methods Context**: Estimation techniques, standard error types
-- **Error Detection**: Cross-validates parsed values to catch OCR errors
-- **Confidence Scores**: Quality metrics for extracted information
+See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for complete development guide.
 
-**Requirements**: Semantic augmentation requires an Anthropic API key. Set the `ANTHROPIC_API_KEY` environment variable before using the `--augment` flag.
+## Common Use Cases
 
-See [docs/SUBAGENT_ARCHITECTURE.md](docs/SUBAGENT_ARCHITECTURE.md) for complete documentation.
+### Meta-Analysis Workflow
 
-## Documentation
+```bash
+# 1. Extract from all papers
+enlace batch papers/ --ocr auto --augment -o extractions/
 
-- [CLAUDE.md](CLAUDE.md) - Development guide for Claude Code
-- [docs/SUBAGENT_ARCHITECTURE.md](docs/SUBAGENT_ARCHITECTURE.md) - Semantic augmentation architecture
-- [tests/README.md](tests/README.md) - Testing documentation
+# 2. Validate extractions
+for file in extractions/*/extraction.json; do
+    enlace validate "$file" --level comprehensive --fail-on-issues
+done
+
+# 3. Export to CSV for analysis
+# (CSV files are in extractions/*/tables/)
+```
+
+### OCR Quality Comparison
+
+```bash
+# Extract with different OCR backends
+enlace extract scanned.pdf --ocr tesseract -o results_tesseract/
+enlace extract scanned.pdf --ocr easyocr -o results_easyocr/
+enlace extract scanned.pdf --ocr auto -o results_auto/
+
+# Compare validation results
+enlace validate results_tesseract/scanned/extraction.json -v
+enlace validate results_easyocr/scanned/extraction.json -v
+enlace validate results_auto/scanned/extraction.json -v
+```
+
+### Semantic Context for Data Harmonization
+
+```python
+from pathlib import Path
+from enlace.core.extractor import PaperExtractor
+from enlace.core.config import ExtractionConfig
+
+# Extract with semantic context
+config = ExtractionConfig(enable_augmentation=True)
+extractor = PaperExtractor(config)
+
+result = extractor.extract(Path("paper.pdf"))
+augmented = extractor.augment(result)
+
+# Access variable context for harmonization
+for table in augmented.tables:
+    if table.table_type == "regression":
+        for model in table.models:
+            for coef in model.coefficients:
+                if coef.variable_context:
+                    print(f"{coef.variable_name}:")
+                    print(f"  Definition: {coef.variable_context['definition']}")
+                    print(f"  Units: {coef.variable_context['units']}")
+                    print(f"  Source: {coef.variable_context['data_source']}")
+```
+
+## Troubleshooting
+
+### OCR Not Working
+
+1. Ensure OCR is enabled: `--ocr auto`
+2. Install OCR backends: `uv pip install docling[easyocr,tesseract]`
+3. For EasyOCR GPU support: `uv pip install torch torchvision`
+
+### Semantic Augmentation Fails
+
+1. Check API key: `echo $ANTHROPIC_API_KEY`
+2. Set API key: `export ANTHROPIC_API_KEY=your_key`
+3. Verify model: `export ENLACE_LLM_MODEL=claude-4-5-haiku`
+
+### Low Extraction Quality
+
+1. Try different OCR backend: `--ocr easyocr`
+2. Enable augmentation for validation: `--augment`
+3. Check validation report: `enlace validate output/paper/extraction.json --level comprehensive -v`
+
+See [CLI Guide](docs/CLI_GUIDE.md#troubleshooting) for more troubleshooting tips.
+
+## Contributing
+
+We welcome contributions! Please see [DEVELOPMENT.md](docs/DEVELOPMENT.md) for:
+
+- Development environment setup
+- Code style guidelines
+- Testing requirements
+- Pull request process
+
+## License
+
+MIT License - See [LICENSE](LICENSE) file for details.
+
+## Citation
+
+If you use enlace in your research, please cite:
+
+```bibtex
+@software{enlace2025,
+  title = {enlace: Research Paper Data Extraction for Meta-Analysis},
+  author = {Your Name},
+  year = {2025},
+  url = {https://github.com/yourusername/enlace}
+}
+```
+
+## Support
+
+- **Documentation**: See [docs/](docs/) directory
+- **Issues**: Report bugs at <https://github.com/yourusername/enlace/issues>
+- **Discussions**: Ask questions at <https://github.com/yourusername/enlace/discussions>
+
+## Acknowledgments
+
+enlace is built on excellent open-source tools:
+
+- [docling](https://github.com/DS4SD/docling) - Document conversion and table extraction
+- [pydantic](https://github.com/pydantic/pydantic) - Data validation
+- [typer](https://github.com/tiangolo/typer) - CLI framework
+- [langchain](https://github.com/langchain-ai/langchain) - LLM integration
+- [chromadb](https://github.com/chroma-core/chroma) - Vector database for RAG
