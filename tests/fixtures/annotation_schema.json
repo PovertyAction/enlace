@@ -1,0 +1,185 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ground Truth Annotation Schema",
+  "description": "Schema for benchmark testing ground truth annotations",
+  "type": "object",
+  "required": ["paper_id", "source_file", "ground_truth"],
+  "properties": {
+    "paper_id": {
+      "type": "string",
+      "description": "Unique identifier for the paper (filename without extension)"
+    },
+    "source_file": {
+      "type": "string",
+      "description": "Relative path to source PDF file"
+    },
+    "annotation_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date annotation was created or last updated"
+    },
+    "annotator": {
+      "type": "string",
+      "description": "Name or ID of person who created annotation"
+    },
+    "ground_truth": {
+      "type": "object",
+      "required": ["metadata", "tables"],
+      "properties": {
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "title": {"type": "string"},
+            "authors": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "year": {"type": "integer"},
+            "doi": {"type": ["string", "null"]},
+            "journal": {"type": ["string", "null"]},
+            "abstract": {"type": ["string", "null"]}
+          },
+          "required": ["title", "authors", "year"]
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["table_id", "table_number", "table_type"],
+            "properties": {
+              "table_id": {
+                "type": "string",
+                "description": "Unique table identifier (e.g., table_3)"
+              },
+              "table_number": {
+                "type": "string",
+                "description": "Table number as appears in paper (e.g., Table 3)"
+              },
+              "title": {"type": "string"},
+              "page_number": {"type": ["integer", "null"]},
+              "table_type": {
+                "type": "string",
+                "enum": ["regression", "summary_statistics", "balance", "other"]
+              },
+              "notes": {"type": ["string", "null"]},
+              "models": {
+                "type": "array",
+                "description": "For regression tables only",
+                "items": {
+                  "type": "object",
+                  "required": ["model_number", "coefficients"],
+                  "properties": {
+                    "model_number": {"type": "integer"},
+                    "dependent_variable": {"type": ["string", "null"]},
+                    "coefficients": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["variable_name"],
+                        "properties": {
+                          "variable_name": {"type": "string"},
+                          "coefficient": {"type": ["number", "null"]},
+                          "std_error": {"type": ["number", "null"]},
+                          "t_statistic": {"type": ["number", "null"]},
+                          "p_value": {"type": ["number", "null"]},
+                          "significance": {
+                            "type": ["string", "null"],
+                            "enum": [null, "*", "**", "***"]
+                          },
+                          "ci_lower": {"type": ["number", "null"]},
+                          "ci_upper": {"type": ["number", "null"]}
+                        }
+                      }
+                    },
+                    "n_observations": {"type": ["integer", "null"]},
+                    "r_squared": {"type": ["number", "null"]},
+                    "adjusted_r_squared": {"type": ["number", "null"]},
+                    "f_statistic": {"type": ["number", "null"]},
+                    "se_type": {"type": ["string", "null"]},
+                    "fixed_effects": {
+                      "type": "array",
+                      "items": {"type": "string"}
+                    },
+                    "clustering": {"type": ["string", "null"]}
+                  }
+                }
+              },
+              "statistics": {
+                "type": "array",
+                "description": "For summary statistics tables only",
+                "items": {
+                  "type": "object",
+                  "required": ["variable_name"],
+                  "properties": {
+                    "variable_name": {"type": "string"},
+                    "n_obs": {"type": ["integer", "null"]},
+                    "mean": {"type": ["number", "null"]},
+                    "median": {"type": ["number", "null"]},
+                    "std_dev": {"type": ["number", "null"]},
+                    "min_value": {"type": ["number", "null"]},
+                    "max_value": {"type": ["number", "null"]},
+                    "p10": {"type": ["number", "null"]},
+                    "p25": {"type": ["number", "null"]},
+                    "p50": {"type": ["number", "null"]},
+                    "p75": {"type": ["number", "null"]},
+                    "p90": {"type": ["number", "null"]}
+                  }
+                }
+              },
+              "comparisons": {
+                "type": "array",
+                "description": "For balance tables only",
+                "items": {
+                  "type": "object",
+                  "required": ["variable_name"],
+                  "properties": {
+                    "variable_name": {"type": "string"},
+                    "control_mean": {"type": ["number", "null"]},
+                    "control_sd": {"type": ["number", "null"]},
+                    "control_n": {"type": ["integer", "null"]},
+                    "treatment_mean": {"type": ["number", "null"]},
+                    "treatment_sd": {"type": ["number", "null"]},
+                    "treatment_n": {"type": ["integer", "null"]},
+                    "difference": {"type": ["number", "null"]},
+                    "p_value": {"type": ["number", "null"]},
+                    "normalized_difference": {"type": ["number", "null"]}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "figures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["figure_id", "figure_number"],
+            "properties": {
+              "figure_id": {"type": "string"},
+              "figure_number": {"type": "string"},
+              "caption": {"type": ["string", "null"]},
+              "page_number": {"type": ["integer", "null"]},
+              "figure_type": {
+                "type": ["string", "null"],
+                "enum": [null, "chart", "diagram", "map", "photo", "plot", "other"]
+              }
+            }
+          }
+        },
+        "semantic_context": {
+          "type": "object",
+          "description": "Optional semantic context for augmentation benchmarking",
+          "properties": {
+            "variable_definitions": {
+              "type": "object",
+              "additionalProperties": {"type": "string"}
+            },
+            "treatment_description": {"type": ["string", "null"]},
+            "study_design": {"type": ["string", "null"]},
+            "population_description": {"type": ["string", "null"]}
+          }
+        }
+      }
+    }
+  }
+}

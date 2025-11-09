@@ -79,13 +79,17 @@ class ExtractionValidator:
         }
 
     def validate(
-        self, extraction: ExtractionResult | Path, level: str | None = None
+        self,
+        extraction: ExtractionResult | Path,
+        level: str | None = None,
+        custom_checks: list[str] | None = None,
     ) -> ValidationResult:
         """Validate extraction result.
 
         Args:
             extraction: ExtractionResult object or path to extraction.json
             level: Override validation level from config (quick, standard, comprehensive)
+            custom_checks: Optional custom list of checks (overrides level)
 
         Returns:
             ValidationResult with check results and recommendations
@@ -101,8 +105,8 @@ class ExtractionValidator:
                 raise FileNotFoundError(f"Extraction file not found: {extraction}")
             extraction = ExtractionResult.parse_file(extraction)
 
-        # Get checks to run
-        checks_to_run = self.config.get_checks_for_level(level)
+        # Get checks to run (custom_checks override level)
+        checks_to_run = self.config.get_checks_for_level(level, custom_checks)
         logger.info(f"Running {len(checks_to_run)} validation checks: {checks_to_run}")
 
         # Initialize result

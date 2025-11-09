@@ -93,6 +93,15 @@ class ExtractionConfig(BaseSettings):
     verbose: bool = Field(default=False, description="Enable verbose logging")
     log_file: Path | None = Field(default=None, description="Optional log file path")
 
+    # Dry-run mode
+    dry_run: bool = Field(
+        default=False,
+        description="Dry-run mode: analyze document without full extraction/OCR",
+    )
+
+    # Internal tracking for config source (set during load_config)
+    _config_sources: dict[str, str] = {}
+
     @classmethod
     def load_config(
         cls, config_file: Path | None = None, **cli_args: Any
@@ -133,7 +142,63 @@ class ExtractionConfig(BaseSettings):
         cli_config = {k: v for k, v in cli_args.items() if v is not None}
 
         # Merge and instantiate (later overrides earlier)
-        return cls(**{**file_config, **cli_config})
+        instance = cls(**{**file_config, **cli_config})
+
+        # Track configuration sources for debugging
+        instance._config_sources = cls._determine_config_sources(
+            file_config, cli_config
+        )
+
+        return instance
+
+    @classmethod
+    def _determine_config_sources(
+        cls, file_config: dict[str, Any], cli_config: dict[str, Any]
+    ) -> dict[str, str]:
+        """Determine the source of each configuration value.
+
+        Args:
+            file_config: Configuration from file
+            cli_config: Configuration from CLI arguments
+
+        Returns:
+            Dictionary mapping field names to their sources
+
+        """
+        sources = {}
+        for field_name in cls.model_fields:
+            if field_name in cli_config:
+                sources[field_name] = "cli"
+            elif field_name in file_config:
+                sources[field_name] = "file"
+            # Note: env vars are harder to track with pydantic-settings
+            # We could check os.environ, but it's complex with the prefix
+            else:
+                sources[field_name] = "default"
+        return sources
+
+    def get_effective_config(self) -> dict[str, Any]:
+        """Return resolved configuration showing which values came from where.
+
+        Returns:
+            Dictionary with field names, values, and sources
+
+        Example:
+            >>> config = ExtractionConfig.load_config()
+            >>> effective = config.get_effective_config()
+            >>> print(effective["enable_ocr"])
+            {'value': False, 'source': 'default'}
+
+        """
+        return {
+            field: {
+                "value": getattr(self, field),
+                "source": self._config_sources.get(field, "unknown"),
+                "description": self.model_fields[field].description,
+            }
+            for field in self.model_fields
+            if not field.startswith("_")
+        }
 
 
 class ValidationConfig(BaseSettings):
@@ -201,8 +266,26 @@ class ValidationConfig(BaseSettings):
         cli_config = {k: v for k, v in cli_args.items() if v is not None}
         return cls(**{**file_config, **cli_config})
 
-    def get_checks_for_level(self, level: str | None = None) -> list[str]:
-        """Get validation checks for specified level."""
+    def get_checks_for_level(
+        self, level: str | None = None, custom_checks: list[str] | None = None
+    ) -> list[str]:
+        """Get validation checks for specified level or custom check list.
+
+        Args:
+            level: Level name (uses self.level if None)
+            custom_checks: Optional custom check list (overrides level)
+
+        Returns:
+            List of check names to run
+
+        Raises:
+            ConfigError: If level not found and no custom_checks provided
+
+        """
+        # Custom checks override level
+        if custom_checks is not None:
+            return custom_checks
+
         level = level or self.level
         if level not in self.levels:
             raise ConfigError(
@@ -210,3 +293,18 @@ class ValidationConfig(BaseSettings):
                 f"Available levels: {', '.join(self.levels.keys())}"
             )
         return self.levels[level]
+
+    def add_custom_level(self, name: str, checks: list[str]) -> None:
+        """Add or update a custom validation level.
+
+        Args:
+            name: Level name
+            checks: List of check names
+
+        Example:
+            >>> config = ValidationConfig()
+            >>> config.add_custom_level("minimal", ["structure"])
+            >>> config.level = "minimal"
+
+        """
+        self.levels[name] = checks

@@ -80,11 +80,29 @@ def extract(
         "--log-level",
         help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Analyze document structure without full extraction (estimate OCR costs, table count)",
+    ),
+    show_config: bool = typer.Option(
+        False, "--show-config", help="Display effective configuration and exit"
+    ),
 ):
     """Extract tables, figures, and metadata from research papers.
 
-    Example:
+    Examples:
+        # Basic extraction
+        enlace extract paper.pdf -o output
+
+        # With semantic augmentation
         enlace extract paper.pdf -o output --augment
+
+        # Dry-run to estimate OCR requirements
+        enlace extract paper.pdf --ocr auto --dry-run
+
+        # Show effective configuration
+        enlace extract paper.pdf --show-config
 
     """
     try:
@@ -107,7 +125,68 @@ def extract(
             output_format=format,
             output_dir=output_dir,
             verbose=verbose,
+            dry_run=dry_run,
         )
+
+        # Show effective configuration and exit if requested
+        if show_config:
+            console.print("\n[bold cyan]Effective Configuration:[/]")
+            console.print()
+            effective = config.get_effective_config()
+            for field_name, field_info in effective.items():
+                source_color = {
+                    "cli": "yellow",
+                    "file": "green",
+                    "default": "dim",
+                    "unknown": "red",
+                }.get(field_info["source"], "white")
+                console.print(
+                    f"  [bold]{field_name}[/]: {field_info['value']} "
+                    f"[{source_color}]({field_info['source']})[/]"
+                )
+                if field_info.get("description"):
+                    console.print(f"    [dim]{field_info['description']}[/]")
+            return
+
+        # Dry-run mode: analyze document structure without full extraction
+        if dry_run:
+            console.print(
+                f"\n[bold yellow]DRY RUN MODE:[/] Analyzing {input_path.name}...\n"
+            )
+
+            # Quick document analysis
+            from enlace.utils.docling_utils import analyze_document_structure
+
+            analysis = analyze_document_structure(input_path, config)
+
+            # Display analysis results
+            console.print("[bold cyan]Document Analysis:[/]")
+            console.print(f"  [cyan]Pages:[/] {analysis.get('pages', 'unknown')}")
+            console.print(f"  [cyan]Tables detected:[/] {analysis.get('tables', 0)}")
+            console.print(f"  [cyan]Figures detected:[/] {analysis.get('figures', 0)}")
+            console.print(
+                f"  [cyan]Scanned content:[/] {analysis.get('scanned_percentage', 0):.1f}%"
+            )
+
+            if config.enable_ocr and analysis.get("scanned_percentage", 0) > 0:
+                console.print("\n[bold cyan]OCR Estimate:[/]")
+                console.print(f"  [cyan]Primary backend:[/] {config.ocr_backend}")
+                if config.hybrid_ocr_enabled and config.ocr_backend == "auto":
+                    console.print(
+                        "  [cyan]Hybrid fallback:[/] Enabled (Tesseract → EasyOCR)"
+                    )
+                    console.print(
+                        f"  [yellow]Estimated fallback usage:[/] "
+                        f"~{analysis.get('estimated_fallback_pct', 20):.0f}% of cells"
+                    )
+                console.print(
+                    f"  [cyan]Confidence threshold:[/] {config.ocr_confidence_threshold}"
+                )
+
+            console.print(
+                "\n[dim]To proceed with extraction, run without --dry-run flag[/]"
+            )
+            return
 
         # Create progress bar
         with Progress(
@@ -183,6 +262,11 @@ def validate(
         "-l",
         help="Validation level (quick, standard, comprehensive)",
     ),
+    checks: list[str] = typer.Option(
+        None,
+        "--check",
+        help="Custom validation checks (overrides --level). Can specify multiple times.",
+    ),
     output_dir: Path = typer.Option(
         Path("validation_reports"), "--output", "-o", help="Output directory"
     ),
@@ -203,8 +287,15 @@ def validate(
 ):
     """Validate extracted research data.
 
-    Example:
+    Examples:
+        # Use predefined level
         enlace validate output/paper/extraction.json --level comprehensive
+
+        # Custom checks
+        enlace validate output/paper/extraction.json --check structure --check accuracy
+
+        # List available checks
+        enlace validate --help  # See validator module for available checks
 
     """
     try:
@@ -218,8 +309,14 @@ def validate(
             verbose=verbose,
         )
 
+        # If custom checks provided, display what will be run
+        if checks:
+            console.print(
+                f"\n[bold cyan]Running custom validation checks:[/] {', '.join(checks)}\n"
+            )
+
         validator = ExtractionValidator(config)
-        result = validator.validate(extraction_path, level=level)
+        result = validator.validate(extraction_path, level=level, custom_checks=checks)
 
         result.save(output_dir)
 

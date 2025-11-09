@@ -127,3 +127,80 @@ def get_docling_converter(
             InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
         }
     )
+
+
+def analyze_document_structure(pdf_path: Path, config) -> dict:
+    """Analyze document structure for dry-run mode.
+
+    Performs a lightweight analysis of the document to estimate extraction
+    requirements without performing full extraction or OCR.
+
+    Args:
+        pdf_path: Path to PDF file
+        config: ExtractionConfig instance
+
+    Returns:
+        Dictionary with analysis results:
+            - pages: Number of pages
+            - tables: Number of tables detected
+            - figures: Number of figures/images
+            - scanned_percentage: Estimated percentage of scanned content (0-100)
+            - estimated_fallback_pct: Estimated percentage requiring OCR fallback
+
+    Raises:
+        ExtractionError: If analysis fails
+
+    """
+    try:
+        # Quick conversion without OCR to detect structure
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.do_table_structure = True
+        pipeline_options.do_ocr = False  # No OCR for dry-run
+        pipeline_options.generate_page_images = False
+        pipeline_options.generate_picture_images = False
+
+        converter = DocumentConverter(
+            format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+            }
+        )
+
+        logger.info(f"Analyzing document structure: {pdf_path.name}")
+        result = converter.convert(str(pdf_path))
+
+        # Count structural elements
+        doc = result.document
+        num_pages = len(doc.pages) if hasattr(doc, "pages") else 0
+        num_tables = len([t for t in doc.tables]) if hasattr(doc, "tables") else 0
+        num_figures = len([f for f in doc.pictures]) if hasattr(doc, "pictures") else 0
+
+        # Estimate scanned content by checking text density
+        total_text_length = len(doc.export_to_markdown())
+        estimated_scanned = 0.0
+        if num_pages > 0:
+            avg_text_per_page = total_text_length / num_pages
+            # If average text per page is low, likely scanned
+            if avg_text_per_page < 500:  # Threshold for detecting scanned pages
+                estimated_scanned = 80.0
+            elif avg_text_per_page < 1000:
+                estimated_scanned = 40.0
+            else:
+                estimated_scanned = 10.0
+
+        # Estimate OCR fallback percentage based on table count
+        # Tables in scanned documents often need fallback
+        estimated_fallback = 20.0  # Default estimate
+        if estimated_scanned > 50 and num_tables > 0:
+            estimated_fallback = 30.0
+
+        return {
+            "pages": num_pages,
+            "tables": num_tables,
+            "figures": num_figures,
+            "scanned_percentage": estimated_scanned,
+            "estimated_fallback_pct": estimated_fallback,
+        }
+
+    except Exception as e:
+        logger.error(f"Document analysis failed: {e}", exc_info=True)
+        raise ExtractionError(f"Failed to analyze {pdf_path.name}") from e
