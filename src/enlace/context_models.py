@@ -215,6 +215,16 @@ class ValidationResult(BaseModel):
         None, description="Page number where value was found"
     )
 
+    # OCR re-extraction flags (NEW)
+    requires_reextraction: bool = Field(
+        default=False,
+        description="Whether value should be re-extracted with different OCR",
+    )
+    recommended_ocr_backend: str | None = Field(
+        None,
+        description="Recommended OCR backend for re-extraction (easyocr, vlm, etc.)",
+    )
+
 
 class HarmonizationMetadata(BaseModel):
     """Structured metadata prepared for downstream harmonization.

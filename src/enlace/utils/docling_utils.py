@@ -23,7 +23,7 @@ logger = logging.getLogger("enlace.utils.docling")
 def convert_pdf_to_markdown(
     pdf_path: Path,
     output_dir: Path,
-    enable_ocr: bool = False,
+    ocr_options=None,
     extract_figures: bool = True,
 ) -> tuple[Path, ConversionResult]:
     """Convert PDF to markdown using docling.
@@ -31,7 +31,8 @@ def convert_pdf_to_markdown(
     Args:
         pdf_path: Path to PDF file
         output_dir: Directory to save markdown file
-        enable_ocr: Enable OCR for scanned documents
+        ocr_options: Pre-configured OCR options (TesseractOcrOptions or EasyOcrOptions),
+                    or None to disable OCR
         extract_figures: Enable figure/image extraction
 
     Returns:
@@ -63,7 +64,13 @@ def convert_pdf_to_markdown(
         # Configure pipeline
         pipeline_options = PdfPipelineOptions()
         pipeline_options.do_table_structure = True
-        pipeline_options.do_ocr = enable_ocr
+
+        # Configure OCR
+        if ocr_options is not None:
+            pipeline_options.do_ocr = True
+            pipeline_options.ocr_options = ocr_options
+        else:
+            pipeline_options.do_ocr = False
 
         # Configure figure extraction
         pipeline_options.generate_page_images = extract_figures

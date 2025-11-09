@@ -6,11 +6,11 @@ and ChromaDB for retrieving relevant context from research papers.
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
 import chromadb
-from augmentation_config import AugmentationConfig
 from chromadb.config import Settings
 from langchain_anthropic import ChatAnthropic
 from langchain_chroma import Chroma
@@ -19,6 +19,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
+
+from enlace.augmentation_config import AugmentationConfig
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +57,19 @@ class SemanticSearchPipeline:
         )
 
         # Initialize LLM for QA
+        # Get API key from environment
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            logger.warning(
+                "ANTHROPIC_API_KEY not found. Semantic augmentation will not work. "
+                "Set ANTHROPIC_API_KEY environment variable."
+            )
+
         self.llm = ChatAnthropic(
             model=self.config.llm_model,
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
+            api_key=api_key,
         )
 
         # Vectorstore (initialized per document)
@@ -207,10 +218,23 @@ class SemanticSearchPipeline:
 
         k = k or self.config.top_k_chunks
 
-        logger.debug(f"Semantic search: {query[:100]}... (k={k})")
+        logger.info(f"Semantic search: {query[:100]}... (k={k})")
 
         # Perform similarity search
-        results = self.vectorstore.similarity_search_with_relevance_scores(query, k=k)
+        # Note: ChromaDB can return negative scores with cosine distance
+        # We normalize scores to [0, 1] range: score_normalized = (score + 1) / 2
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Relevance scores must be")
+            results = self.vectorstore.similarity_search_with_relevance_scores(
+                query, k=k
+            )
+
+        # Normalize scores from [-1, 1] to [0, 1] for cosine distance
+        normalized_results = [
+            (doc, (score + 1) / 2 if score < 0 else score) for doc, score in results
+        ]
 
         # Filter by similarity threshold
         filtered_results = [
@@ -221,7 +245,7 @@ class SemanticSearchPipeline:
                 "chunk_index": doc.metadata.get("chunk_index"),
                 "similarity_score": score,
             }
-            for doc, score in results
+            for doc, score in normalized_results
             if score >= self.config.similarity_threshold
         ]
 
@@ -248,7 +272,7 @@ class SemanticSearchPipeline:
 
         k = k or self.config.top_k_chunks
 
-        logger.debug(f"QA query: {question[:100]}...")
+        logger.info(f"QA query: {question[:100]}...")
 
         # Semantic search for relevant chunks
         chunks = await self.semantic_search(question, k=k)
@@ -298,7 +322,7 @@ Context from paper:
             # Estimate confidence based on answer quality and chunk similarity
             confidence = self._estimate_confidence(answer, chunks)
 
-            logger.debug(f"QA answer: {answer[:100]}... (confidence: {confidence:.2f})")
+            logger.info(f"QA answer: {answer[:100]}... (confidence: {confidence:.2f})")
 
             return {
                 "answer": answer,

@@ -73,6 +73,17 @@ class ValidationResult(BaseModel):
     # Recommendations
     recommendations: list[str] = Field(default_factory=list)
 
+    # OCR quality metrics
+    low_confidence_values: int = Field(
+        default=0, description="Number of values with low OCR confidence"
+    )
+    ocr_artifacts_detected: int = Field(
+        default=0, description="Number of potential OCR character errors detected"
+    )
+    hybrid_ocr_triggered: int = Field(
+        default=0, description="Number of times fallback OCR was used"
+    )
+
     def save(self, output_dir: Path) -> None:
         """Save validation report to JSON file.
 

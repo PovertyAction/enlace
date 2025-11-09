@@ -23,7 +23,7 @@ from enlace.exceptions import (
 )
 from enlace.models.extraction import ExtractionResult
 from enlace.utils.docling_utils import convert_pdf_to_markdown
-from enlace.utils.logging import setup_logging
+from enlace.utils.ocr_backends import OCRBackendManager
 
 logger = logging.getLogger("enlace.extractor")
 
@@ -59,16 +59,15 @@ class PaperExtractor:
             enable_ocr=config.enable_ocr, extract_figures=config.extract_figures
         )
 
-        # Setup logging
-        self.logger = setup_logging(
-            level="DEBUG" if config.verbose else "INFO", log_file=config.log_file
-        )
+        # Initialize OCR backend manager
+        self.ocr_manager = OCRBackendManager(config) if config.enable_ocr else None
 
         # Lazy-load augmentation components
         self.table_augmenter = None
 
         logger.info(
             f"PaperExtractor initialized: ocr={config.enable_ocr}, "
+            f"ocr_backend={config.ocr_backend if config.enable_ocr else 'none'}, "
             f"augmentation={config.enable_augmentation}, "
             f"figures={config.extract_figures}"
         )
@@ -113,10 +112,19 @@ class PaperExtractor:
 
             # Step 1: Convert PDF to markdown
             logger.info("Step 1: Converting to markdown")
+
+            # Get OCR options from backend manager
+            ocr_options = None
+            if self.ocr_manager:
+                ocr_options = self.ocr_manager.create_primary_ocr_options()
+                logger.info(
+                    f"Using OCR backend: {self.ocr_manager.get_backend_name(self.ocr_manager.primary_backend)}"
+                )
+
             markdown_path, conversion_result = convert_pdf_to_markdown(
                 paper_path,
                 paper_output_dir,
-                enable_ocr=self.config.enable_ocr,
+                ocr_options=ocr_options,
                 extract_figures=self.config.extract_figures,
             )
 
@@ -189,7 +197,7 @@ class PaperExtractor:
             logger.error(f"Extraction failed: {e}", exc_info=True)
             raise ExtractionError(f"Failed to extract from {paper_path.name}") from e
 
-    def augment(self, extraction: ExtractionResult) -> ExtractionResult:
+    async def augment(self, extraction: ExtractionResult) -> ExtractionResult:
         """Augment extraction with semantic context using RAG.
 
         Args:
@@ -215,7 +223,7 @@ class PaperExtractor:
             logger.info("Augmenting extraction with semantic context")
 
             # Process document for semantic search
-            self.table_augmenter.process_document(str(extraction.source_file))
+            await self.table_augmenter.process_document(str(extraction.source_file))
 
             # Augment each table
             augmented_tables = []
@@ -225,26 +233,28 @@ class PaperExtractor:
                     table_type = self._get_table_type(table)
 
                     if table_type == "regression":
-                        _context = self.table_augmenter.augment_regression_table(
+                        _context = await self.table_augmenter.augment_regression_table(
                             table,
                             table.table_number or "unknown",
                             str(extraction.source_file),
                         )
                     elif table_type in ["summary", "descriptive"]:
-                        _context = self.table_augmenter.augment_summary_stats_table(
-                            table,
-                            table.table_number or "unknown",
-                            str(extraction.source_file),
+                        _context = (
+                            await self.table_augmenter.augment_summary_stats_table(
+                                table,
+                                table.table_number or "unknown",
+                                str(extraction.source_file),
+                            )
                         )
                     elif table_type == "balance":
-                        _context = self.table_augmenter.augment_balance_table(
+                        _context = await self.table_augmenter.augment_balance_table(
                             table,
                             table.table_number or "unknown",
                             str(extraction.source_file),
                         )
                     else:
                         # Default to regression augmentation
-                        _context = self.table_augmenter.augment_regression_table(
+                        _context = await self.table_augmenter.augment_regression_table(
                             table,
                             table.table_number or "unknown",
                             str(extraction.source_file),
@@ -276,8 +286,8 @@ class PaperExtractor:
     def _initialize_augmentation(self):
         """Initialize semantic augmentation components."""
         try:
-            from augmentation_config import AugmentationConfig
-            from table_augmenter import TableAugmenter
+            from enlace.augmentation_config import AugmentationConfig
+            from enlace.table_augmenter import TableAugmenter
 
             # Create config
             aug_config = AugmentationConfig()

@@ -8,16 +8,16 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from augmentation_config import AugmentationConfig
-from context_extractors import (
+from enlace.augmentation_config import AugmentationConfig
+from enlace.context_extractors import (
     MethodsContextExtractor,
     OutcomeContextExtractor,
     StudyContextExtractor,
     TreatmentContextExtractor,
     VariableContextExtractor,
 )
-from context_models import TableContext
-from semantic_search import SemanticSearchPipeline
+from enlace.context_models import TableContext
+from enlace.semantic_search import SemanticSearchPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +104,8 @@ class TableAugmenter:
         # Extract methods context for this specific table
         methods_context = None
         if self.config.augment_methods:
-            methods_context = await self.methods_extractor.extract_context(
-                table_number=table_id
+            methods_context = await self.methods_extractor.extract_methods_for_table(
+                table_caption="", table_number=table_id
             )
             logger.debug(
                 f"Methods context extracted with confidence: "
@@ -116,7 +116,7 @@ class TableAugmenter:
         variable_contexts = {}
         if self.config.augment_variables:
             variable_names = self._extract_variable_names_from_table(table_data)
-            logger.debug(f"Extracting context for {len(variable_names)} variables")
+            logger.info(f"Extracting context for {len(variable_names)} variables")
 
             for var_name in variable_names:
                 var_context = await self.variable_extractor.extract_context(var_name)
@@ -165,9 +165,16 @@ class TableAugmenter:
         )
 
         # Build comprehensive TableContext
+        # Get caption from Pydantic model or dict
+        caption = (
+            table_data.caption
+            if hasattr(table_data, "caption")
+            else table_data.get("caption", "Regression results")
+        )
+
         table_context = TableContext(
             table_id=table_id,
-            table_description=table_data.get("caption", "Regression results"),
+            table_description=caption or "Regression results",
             study_context=study_context if self.config.augment_study_context else None,
             treatment_contexts=(
                 treatment_contexts if self.config.augment_treatments else []
@@ -238,9 +245,16 @@ class TableAugmenter:
             study_context, treatment_contexts, variable_contexts, {}, None
         )
 
+        # Get caption from Pydantic model or dict
+        caption = (
+            table_data.caption
+            if hasattr(table_data, "caption")
+            else table_data.get("caption", "Summary statistics")
+        )
+
         table_context = TableContext(
             table_id=table_id,
-            table_description=table_data.get("caption", "Summary statistics"),
+            table_description=caption or "Summary statistics",
             study_context=study_context if self.config.augment_study_context else None,
             treatment_contexts=(
                 treatment_contexts if self.config.augment_treatments else []
@@ -308,9 +322,16 @@ class TableAugmenter:
             study_context, treatment_contexts, variable_contexts, {}, None
         )
 
+        # Get caption from Pydantic model or dict
+        caption = (
+            table_data.caption
+            if hasattr(table_data, "caption")
+            else table_data.get("caption", "Balance table")
+        )
+
         table_context = TableContext(
             table_id=table_id,
-            table_description=table_data.get("caption", "Balance table"),
+            table_description=caption or "Balance table",
             study_context=study_context if self.config.augment_study_context else None,
             treatment_contexts=(
                 treatment_contexts if self.config.augment_treatments else []
@@ -354,7 +375,7 @@ class TableAugmenter:
                     await self.treatment_extractor.extract_treatment_arms()
                 )
                 self._treatment_contexts_cache[doc_path] = treatment_contexts
-                logger.debug(f"Cached {len(treatment_contexts)} treatment contexts")
+                logger.info(f"Cached {len(treatment_contexts)} treatment contexts")
             else:
                 self._treatment_contexts_cache[doc_path] = []
 
@@ -374,29 +395,61 @@ class TableAugmenter:
         """
         variables = set()
 
-        # Handle regression table structure
-        if "models" in table_data:
-            for model in table_data["models"]:
-                if "coefficients" in model:
-                    for coef in model["coefficients"]:
-                        if "variable" in coef:
-                            variables.add(coef["variable"])
+        # Handle regression table structure (Pydantic or dict)
+        models = (
+            table_data.models
+            if hasattr(table_data, "models")
+            else table_data.get("models", [])
+        )
+        if models:
+            for model in models:
+                coefficients = (
+                    model.coefficients
+                    if hasattr(model, "coefficients")
+                    else model.get("coefficients", [])
+                )
+                for coef in coefficients:
+                    var_name = (
+                        coef.variable_name
+                        if hasattr(coef, "variable_name")
+                        else coef.get("variable", coef.get("variable_name"))
+                    )
+                    if var_name:
+                        variables.add(var_name)
 
         # Handle summary stats / balance table structure
-        elif "variables" in table_data:
-            for var in table_data["variables"]:
-                if "name" in var:
-                    variables.add(var["name"])
-                elif isinstance(var, str):
-                    variables.add(var)
+        else:
+            table_variables = (
+                table_data.variables
+                if hasattr(table_data, "variables")
+                else table_data.get("variables", [])
+            )
+            if table_variables:
+                for var in table_variables:
+                    if hasattr(var, "name") and var.name:
+                        variables.add(var.name)
+                    elif isinstance(var, dict) and "name" in var:
+                        variables.add(var["name"])
+                    elif isinstance(var, str):
+                        variables.add(var)
 
-        # Fallback: try to extract from any row/column data
-        elif "rows" in table_data:
-            for row in table_data["rows"]:
-                if isinstance(row, dict) and "variable" in row:
-                    variables.add(row["variable"])
+            # Fallback: try to extract from any row/column data
+            else:
+                rows = (
+                    table_data.rows
+                    if hasattr(table_data, "rows")
+                    else table_data.get("rows", [])
+                )
+                for row in rows:
+                    var_name = (
+                        row.variable
+                        if hasattr(row, "variable")
+                        else (row.get("variable") if isinstance(row, dict) else None)
+                    )
+                    if var_name:
+                        variables.add(var_name)
 
-        logger.debug(f"Extracted {len(variables)} variable names from table")
+        logger.info(f"Extracted {len(variables)} variable names from table")
         return sorted(variables)
 
     def _extract_outcome_names_from_table(
@@ -414,22 +467,38 @@ class TableAugmenter:
         outcomes = set()
 
         # Regression tables: outcome is often in model metadata
-        if "models" in table_data:
-            for model in table_data["models"]:
-                if "outcome" in model:
-                    outcomes.add(model["outcome"])
-                elif "dependent_variable" in model:
-                    outcomes.add(model["dependent_variable"])
+        # Handle both Pydantic models and dicts
+        models = (
+            table_data.models
+            if hasattr(table_data, "models")
+            else table_data.get("models", [])
+        )
+        if models:
+            for model in models:
+                # Handle both Pydantic and dict models
+                if hasattr(model, "outcome") and model.outcome:
+                    outcomes.add(model.outcome)
+                elif hasattr(model, "dependent_variable") and model.dependent_variable:
+                    outcomes.add(model.dependent_variable)
+                elif isinstance(model, dict):
+                    if "outcome" in model:
+                        outcomes.add(model["outcome"])
+                    elif "dependent_variable" in model:
+                        outcomes.add(model["dependent_variable"])
 
         # Try to get from caption or description
-        caption = table_data.get("caption", "")
-        if "outcome:" in caption.lower():
+        caption = (
+            table_data.caption
+            if hasattr(table_data, "caption")
+            else table_data.get("caption", "")
+        )
+        if caption and "outcome:" in caption.lower():
             # Simple extraction - could be improved with regex
             pass
 
         # If no outcomes found, return empty list
         # (most tables don't explicitly name outcomes separately)
-        logger.debug(f"Extracted {len(outcomes)} outcome names from table")
+        logger.info(f"Extracted {len(outcomes)} outcome names from table")
         return sorted(outcomes)
 
     def _calculate_overall_confidence(

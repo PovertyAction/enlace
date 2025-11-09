@@ -62,6 +62,7 @@ class ExtractionValidator:
             accuracy,
             completeness,
             missing_data,
+            ocr_quality,
             semantic,
             statistical,
             structure,
@@ -74,6 +75,7 @@ class ExtractionValidator:
             "statistical_consistency": statistical.validate_statistical_consistency,
             "missing_data": missing_data.validate_missing_data,
             "semantic_validation": semantic.validate_semantic_consistency,
+            "ocr_quality": ocr_quality.validate_ocr_quality,
         }
 
     def validate(

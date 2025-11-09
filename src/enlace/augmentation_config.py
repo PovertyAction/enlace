@@ -80,10 +80,14 @@ class AugmentationConfig:
 
     similarity_threshold: float = field(
         default_factory=lambda: float(
-            os.getenv("AUGMENTATION_SIMILARITY_THRESHOLD", "0.6")
+            os.getenv("AUGMENTATION_SIMILARITY_THRESHOLD", "0.3")
         )
     )
-    """Minimum similarity score for chunk retrieval (0-1)."""
+    """Minimum similarity score for chunk retrieval (0-1).
+
+    Note: Scores are normalized from cosine distance [-1, 1] to [0, 1].
+    A threshold of 0.3 corresponds to cosine similarity of -0.4.
+    """
 
     # ========================================================================
     # VALIDATION CONFIGURATION

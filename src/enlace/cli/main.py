@@ -4,16 +4,32 @@ This module provides the main command-line interface for the enlace package,
 supporting extraction, validation, and batch processing of research papers.
 """
 
+import asyncio
 import logging
 from pathlib import Path
 
 import typer
+from dotenv import load_dotenv
+from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
 from enlace.core.config import ExtractionConfig, ValidationConfig
 from enlace.core.extractor import PaperExtractor
 from enlace.core.validator import ExtractionValidator
 from enlace.exceptions import EnlaceError
 from enlace.utils.logging import setup_logging
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Rich console for better output
+console = Console()
 
 app = typer.Typer(
     name="enlace",
@@ -35,7 +51,21 @@ def extract(
     augment: bool = typer.Option(
         False, "--augment", help="Enable semantic augmentation"
     ),
-    ocr: bool = typer.Option(False, "--ocr", help="Enable OCR for scanned documents"),
+    ocr_backend: str = typer.Option(
+        "none",
+        "--ocr",
+        help="OCR backend (auto, tesseract, easyocr, or none to disable)",
+    ),
+    ocr_confidence: float = typer.Option(
+        0.8,
+        "--ocr-confidence",
+        min=0.0,
+        max=1.0,
+        help="OCR confidence threshold for hybrid fallback (0.0-1.0)",
+    ),
+    no_hybrid_ocr: bool = typer.Option(
+        False, "--no-hybrid-ocr", help="Disable hybrid OCR fallback"
+    ),
     format: str = typer.Option(
         "json", "--format", "-f", help="Output format (json, csv, both)"
     ),
@@ -45,6 +75,11 @@ def extract(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose output"
     ),
+    log_level: str = typer.Option(
+        "INFO",
+        "--log-level",
+        help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    ),
 ):
     """Extract tables, figures, and metadata from research papers.
 
@@ -53,46 +88,87 @@ def extract(
 
     """
     try:
-        # Setup logging
-        setup_logging(verbose=verbose)
+        # Derive paper_id from input filename for logging setup
+        paper_id = input_path.stem
+
+        # Setup logging with file output to {output_dir}/{paper_id}/logs/
+        setup_logging(
+            level=log_level, verbose=verbose, paper_id=paper_id, output_dir=output_dir
+        )
 
         # Load configuration
         config = ExtractionConfig.load_config(
             config_file=config_file,
             enable_augmentation=augment,
-            enable_ocr=ocr,
+            enable_ocr=ocr_backend != "none",
+            ocr_backend=ocr_backend if ocr_backend != "none" else "auto",
+            hybrid_ocr_enabled=not no_hybrid_ocr,
+            ocr_confidence_threshold=ocr_confidence,
             output_format=format,
             output_dir=output_dir,
             verbose=verbose,
         )
 
-        # Extract
-        logger.info(f"Extracting from {input_path.name}")
-        extractor = PaperExtractor(config)
-        result = extractor.extract(input_path)
+        # Create progress bar
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=console,
+            transient=False,
+        ) as progress:
+            # Define extraction steps
+            total_steps = 4 if augment else 3
+            task = progress.add_task(
+                f"[cyan]Processing {input_path.name}...", total=total_steps
+            )
 
-        # Augment if requested
-        if augment:
-            logger.info("Running semantic augmentation...")
-            result = extractor.augment(result)
+            # Step 1: Extract
+            progress.update(
+                task, description=f"[cyan]Extracting from {input_path.name}"
+            )
+            logger.info(f"Extracting from {input_path.name}")
+            extractor = PaperExtractor(config)
+            result = extractor.extract(input_path)
+            progress.advance(task)
 
-        # Save
-        result.save(output_dir, format=format)
+            # Step 2: Augment if requested
+            if augment:
+                progress.update(
+                    task, description="[yellow]Running semantic augmentation"
+                )
+                logger.info("Running semantic augmentation...")
+                result = asyncio.run(extractor.augment(result))
+                progress.advance(task)
 
-        # Display results
-        typer.secho(f"✓ Extraction complete: {result.paper_id}", fg=typer.colors.GREEN)
-        typer.echo(f"  Tables: {result.tables_extracted}")
-        typer.echo(f"  Figures: {result.figures_extracted}")
-        typer.echo(f"  Quality: {result.extraction_quality:.2f}")
-        typer.echo(f"  Output: {output_dir / result.paper_id}")
+            # Step 3: Save
+            progress.update(task, description="[blue]Saving results")
+            result.save(output_dir, format=format)
+            progress.advance(task)
+
+            # Step 4: Complete
+            progress.update(
+                task, description=f"[green]✓ Extraction complete: {result.paper_id}"
+            )
+            progress.advance(task)
+
+        # Display results summary
+        console.print()
+        console.print(f"[bold green]✓ Extraction complete: {result.paper_id}[/]")
+        console.print(f"  [cyan]Tables:[/] {result.tables_extracted}")
+        console.print(f"  [cyan]Figures:[/] {result.figures_extracted}")
+        console.print(f"  [cyan]Quality:[/] {result.extraction_quality:.2f}")
+        console.print(f"  [cyan]Output:[/] {output_dir / result.paper_id}")
 
     except EnlaceError as e:
         logger.error(str(e))
-        typer.secho(f"✗ Error: {e}", fg=typer.colors.RED, err=True)
+        console.print(f"[bold red]✗ Error:[/] {e}")
         raise typer.Exit(code=1)
     except Exception as e:
         logger.exception("Unexpected error")
-        typer.secho(f"✗ Unexpected error: {e}", fg=typer.colors.RED, err=True)
+        console.print(f"[bold red]✗ Unexpected error:[/] {e}")
         raise typer.Exit(code=1)
 
 
@@ -119,6 +195,11 @@ def validate(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose output"
     ),
+    log_level: str = typer.Option(
+        "INFO",
+        "--log-level",
+        help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    ),
 ):
     """Validate extracted research data.
 
@@ -127,7 +208,7 @@ def validate(
 
     """
     try:
-        setup_logging(verbose=verbose)
+        setup_logging(level=log_level, verbose=verbose)
 
         config = ValidationConfig.load_config(
             config_file=config_file,
@@ -202,6 +283,11 @@ def batch(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose output"
     ),
+    log_level: str = typer.Option(
+        "INFO",
+        "--log-level",
+        help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    ),
 ):
     """Process multiple papers in batch.
 
@@ -210,7 +296,7 @@ def batch(
 
     """
     try:
-        setup_logging(verbose=verbose)
+        setup_logging(level=log_level, verbose=verbose)
 
         from enlace.core.batch import BatchProcessor
 

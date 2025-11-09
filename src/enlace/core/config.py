@@ -36,6 +36,26 @@ class ExtractionConfig(BaseSettings):
     enable_ocr: bool = Field(
         default=False, description="Enable OCR for scanned documents"
     )
+    ocr_backend: str = Field(
+        default="auto",
+        description="OCR backend: auto (Tesseract+EasyOCR fallback), tesseract, or easyocr",
+    )
+    hybrid_ocr_enabled: bool = Field(
+        default=True,
+        description="Enable hybrid OCR (fallback to secondary engine for low-confidence cells)",
+    )
+    ocr_confidence_threshold: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold for triggering fallback OCR (0.0-1.0)",
+    )
+    ocr_languages: list[str] = Field(
+        default=["eng"], description="OCR language codes (e.g., ['eng', 'fra', 'spa'])"
+    )
+    ocr_use_gpu: bool = Field(
+        default=False, description="Use GPU acceleration for EasyOCR (requires CUDA)"
+    )
     extract_figures: bool = Field(
         default=True, description="Extract figures from papers"
     )
@@ -135,7 +155,13 @@ class ValidationConfig(BaseSettings):
     levels: dict[str, list[str]] = Field(
         default={
             "quick": ["structure", "completeness"],
-            "standard": ["structure", "completeness", "accuracy", "missing_data"],
+            "standard": [
+                "structure",
+                "completeness",
+                "accuracy",
+                "missing_data",
+                "ocr_quality",
+            ],
             "comprehensive": [
                 "structure",
                 "completeness",
@@ -143,6 +169,7 @@ class ValidationConfig(BaseSettings):
                 "statistical_consistency",
                 "missing_data",
                 "semantic_validation",
+                "ocr_quality",
             ],
         },
         description="Mapping of level names to validation check lists",

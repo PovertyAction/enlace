@@ -1055,7 +1055,7 @@ class ContentExtractor:
                 table_id = table["table_id"]
                 table_type = table.get("type", "other")
 
-                logger.debug(f"Augmenting {table_id} (type={table_type})")
+                logger.info(f"Augmenting {table_id} (type={table_type})")
 
                 # Choose appropriate augmentation method based on table type
                 if table_type == "regression":

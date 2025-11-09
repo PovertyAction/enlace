@@ -85,6 +85,20 @@ class TableParser:
             caption = structure["caption"]
             page_no = structure["page"]
 
+            # Analyze OCR confidence
+            ocr_analysis = self._analyze_ocr_confidence(structure)
+            if ocr_analysis["has_confidence_data"]:
+                logger.debug(
+                    f"Table {i + 1} OCR confidence: "
+                    f"avg={ocr_analysis['avg_confidence']:.2f if ocr_analysis['avg_confidence'] else 'N/A'}, "
+                    f"low_conf_cells={ocr_analysis['low_confidence_cells']}/{ocr_analysis['total_cells']}"
+                )
+                if ocr_analysis["needs_fallback"]:
+                    logger.warning(
+                        f"Table {i + 1} has {ocr_analysis['low_confidence_cells']} low-confidence cells "
+                        "(>20% of total) - may benefit from fallback OCR"
+                    )
+
             # Get context text before table
             context = self._get_text_before_table(doc, table)
 
@@ -224,20 +238,29 @@ class TableParser:
         """Extract table structure and metadata."""
         structure = {
             "data": [],
+            "ocr_metadata": [],  # NEW: OCR metadata per cell
             "num_rows": 0,
             "num_cols": 0,
             "caption": "",
             "page": None,
         }
 
-        # Extract table data
+        # Extract table data and OCR metadata
         if hasattr(table, "data"):
             table_data = table.data
             if hasattr(table_data, "grid"):
-                structure["data"] = [
-                    [self._extract_cell_value(cell) for cell in row]
-                    for row in table_data.grid
-                ]
+                # Extract both data and OCR metadata
+                for row in table_data.grid:
+                    data_row = []
+                    metadata_row = []
+                    for cell in row:
+                        text, metadata = self._extract_cell_value(cell)
+                        data_row.append(text)
+                        metadata_row.append(metadata)
+
+                    structure["data"].append(data_row)
+                    structure["ocr_metadata"].append(metadata_row)
+
                 structure["num_rows"] = len(table_data.grid)
                 structure["num_cols"] = (
                     len(table_data.grid[0]) if table_data.grid else 0
@@ -260,11 +283,93 @@ class TableParser:
 
         return structure
 
-    def _extract_cell_value(self, cell: TableCell) -> str:
-        """Extract text from table cell."""
+    def _extract_cell_value(self, cell: TableCell) -> tuple[str, dict[str, Any]]:
+        """Extract text and OCR metadata from table cell.
+
+        Returns:
+            Tuple of (cell_text, ocr_metadata_dict)
+
+        """
         if cell and hasattr(cell, "text"):
-            return cell.text.strip()
-        return ""
+            text = cell.text.strip()
+
+            # Extract OCR confidence if available
+            metadata = {
+                "text": text,
+                "confidence": None,
+                "backend": "unknown",
+            }
+
+            # Try to get confidence from docling cell object
+            # Note: Actual field names depend on docling implementation
+            if hasattr(cell, "confidence"):
+                metadata["confidence"] = cell.confidence
+            elif hasattr(cell, "ocr_confidence"):
+                metadata["confidence"] = cell.ocr_confidence
+
+            return text, metadata
+
+        return "", {"text": "", "confidence": None, "backend": "unknown"}
+
+    def _analyze_ocr_confidence(
+        self, table_structure: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Analyze OCR confidence for a table structure.
+
+        Args:
+            table_structure: Table structure dict with ocr_metadata
+
+        Returns:
+            Dict with confidence analysis results
+
+        """
+        if "ocr_metadata" not in table_structure:
+            return {
+                "has_confidence_data": False,
+                "low_confidence_cells": 0,
+                "total_cells": 0,
+                "avg_confidence": None,
+                "needs_fallback": False,
+            }
+
+        # Analyze confidence scores
+        confidences = []
+        low_conf_cells = 0
+        total_cells = 0
+
+        for row_metadata in table_structure["ocr_metadata"]:
+            for cell_meta in row_metadata:
+                if cell_meta.get("confidence") is not None:
+                    total_cells += 1
+                    conf = cell_meta["confidence"]
+                    confidences.append(conf)
+
+                    # Check if below threshold
+                    if hasattr(self, "config") and hasattr(
+                        self.config, "ocr_confidence_threshold"
+                    ):
+                        threshold = self.config.ocr_confidence_threshold
+                    else:
+                        threshold = 0.8  # Default threshold
+
+                    if conf < threshold:
+                        low_conf_cells += 1
+
+        # Calculate statistics
+        avg_confidence = sum(confidences) / len(confidences) if confidences else None
+
+        # Determine if fallback OCR needed (>20% low confidence cells)
+        needs_fallback = False
+        if total_cells > 0 and (low_conf_cells / total_cells) > 0.2:
+            needs_fallback = True
+
+        return {
+            "has_confidence_data": len(confidences) > 0,
+            "low_confidence_cells": low_conf_cells,
+            "total_cells": total_cells,
+            "avg_confidence": avg_confidence,
+            "needs_fallback": needs_fallback,
+        }
 
     def _get_text_before_table(
         self, doc: DoclingDocument, table, num_items: int = 3

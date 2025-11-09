@@ -45,7 +45,7 @@ class ExtractionResult(BaseModel):
 
     # Quality metrics
     extraction_quality: float = Field(
-        ge=0.0, le=1.0, description="Overall quality score"
+        default=0.0, ge=0.0, le=1.0, description="Overall quality score"
     )
     warnings: list[str] = Field(default_factory=list)
 
@@ -93,6 +93,10 @@ class ExtractionResult(BaseModel):
         """
         import pandas as pd
 
+        # Create tables subdirectory
+        tables_dir = output_dir / "tables"
+        tables_dir.mkdir(parents=True, exist_ok=True)
+
         # Save each table type to CSV
         for idx, table in enumerate(self.tables):
             if isinstance(table, RegressionTable):
@@ -114,7 +118,7 @@ class ExtractionResult(BaseModel):
                         )
                 if rows:
                     df = pd.DataFrame(rows)
-                    csv_path = output_dir / f"regression_table_{idx + 1}.csv"
+                    csv_path = tables_dir / f"regression_table_{idx + 1}.csv"
                     df.to_csv(csv_path, index=False)
 
             elif isinstance(table, SummaryStatisticsTable):
@@ -124,7 +128,7 @@ class ExtractionResult(BaseModel):
                     rows.append(stat.model_dump())
                 if rows:
                     df = pd.DataFrame(rows)
-                    csv_path = output_dir / f"summary_stats_table_{idx + 1}.csv"
+                    csv_path = tables_dir / f"summary_stats_table_{idx + 1}.csv"
                     df.to_csv(csv_path, index=False)
 
             elif isinstance(table, BalanceTable):
@@ -134,5 +138,5 @@ class ExtractionResult(BaseModel):
                     rows.append(comparison.model_dump())
                 if rows:
                     df = pd.DataFrame(rows)
-                    csv_path = output_dir / f"balance_table_{idx + 1}.csv"
+                    csv_path = tables_dir / f"balance_table_{idx + 1}.csv"
                     df.to_csv(csv_path, index=False)

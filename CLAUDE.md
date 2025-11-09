@@ -45,7 +45,7 @@ overlay use .venv/Scripts/activate.nu
 
 ```bash
 # Lint Python code
-just lint-py
+just lint-python
 
 # Format Python code
 just fmt-python

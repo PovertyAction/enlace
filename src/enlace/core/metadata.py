@@ -120,7 +120,7 @@ def extract_citations(markdown_path: Path) -> list[dict]:
                 }
             )
 
-        logger.debug(f"Extracted {len(citations)} citations")
+        logger.info(f"Extracted {len(citations)} citations")
 
     except Exception as e:
         logger.warning(f"Citation extraction error: {e}")

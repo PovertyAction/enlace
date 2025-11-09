@@ -8,14 +8,14 @@ import logging
 import re
 from typing import Any
 
-from context_models import (
+from enlace.context_models import (
     MethodsContext,
     OutcomeContext,
     StudyContext,
     TreatmentContext,
     VariableContext,
 )
-from semantic_search import SemanticSearchPipeline
+from enlace.semantic_search import SemanticSearchPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class VariableContextExtractor:
             VariableContext with extracted information
 
         """
-        logger.debug(f"Extracting context for variable: {variable_name}")
+        logger.info(f"Extracting context for variable: {variable_name}")
 
         # Build context-aware questions
         context_suffix = f" in {table_context}" if table_context else ""
@@ -188,7 +188,7 @@ class TreatmentContextExtractor:
         # Filter out arms with no description
         arms = [arm for arm in arms if arm.description is not None]
 
-        logger.debug(f"Extracted {len(arms)} treatment arms")
+        logger.info(f"Extracted {len(arms)} treatment arms")
 
         return arms
 
@@ -528,7 +528,7 @@ class OutcomeContextExtractor:
             OutcomeContext with measurement details
 
         """
-        logger.debug(f"Extracting outcome context for: {outcome_variable_name}")
+        logger.info(f"Extracting outcome context for: {outcome_variable_name}")
 
         questions = [
             f"How was the outcome '{outcome_variable_name}' measured?",

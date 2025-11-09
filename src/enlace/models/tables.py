@@ -34,6 +34,18 @@ class RegressionCoefficient(BaseModel):
         None, description="Validation result comparing parsed vs RAG-extracted value"
     )
 
+    # OCR quality metadata (optional)
+    ocr_confidence: float | None = Field(
+        None, ge=0.0, le=1.0, description="OCR confidence score (0.0-1.0)"
+    )
+    ocr_backend_used: str | None = Field(
+        None,
+        description="OCR backend that extracted this value (tesseract/easyocr/hybrid)",
+    )
+    ocr_original_text: str | None = Field(
+        None, description="Original OCR text before numeric parsing"
+    )
+
     @field_validator(
         "coefficient",
         "std_error",
@@ -163,6 +175,18 @@ class SummaryStatistic(BaseModel):
         None, description="Semantic context for this variable (from RAG augmentation)"
     )
 
+    # OCR quality metadata (optional)
+    ocr_confidence: float | None = Field(
+        None, ge=0.0, le=1.0, description="OCR confidence score (0.0-1.0)"
+    )
+    ocr_backend_used: str | None = Field(
+        None,
+        description="OCR backend that extracted this value (tesseract/easyocr/hybrid)",
+    )
+    ocr_original_text: str | None = Field(
+        None, description="Original OCR text before numeric parsing"
+    )
+
     @field_validator("n_obs", "n_missing", mode="before")
     @classmethod
     def parse_integer(cls, v):
@@ -278,6 +302,18 @@ class BalanceStatistic(BaseModel):
     # Semantic augmentation fields (optional)
     variable_context: dict[str, Any] | None = Field(
         None, description="Semantic context for this variable (from RAG augmentation)"
+    )
+
+    # OCR quality metadata (optional)
+    ocr_confidence: float | None = Field(
+        None, ge=0.0, le=1.0, description="OCR confidence score (0.0-1.0)"
+    )
+    ocr_backend_used: str | None = Field(
+        None,
+        description="OCR backend that extracted this value (tesseract/easyocr/hybrid)",
+    )
+    ocr_original_text: str | None = Field(
+        None, description="Original OCR text before numeric parsing"
     )
 
     @field_validator("control_n", "treatment_n", "group3_n", mode="before")

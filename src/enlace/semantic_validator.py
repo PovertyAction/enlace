@@ -9,9 +9,9 @@ import logging
 import re
 from typing import Any
 
-from augmentation_config import AugmentationConfig
-from context_models import ValidationResult
-from semantic_search import SemanticSearchPipeline
+from enlace.augmentation_config import AugmentationConfig
+from enlace.context_models import ValidationResult
+from enlace.semantic_search import SemanticSearchPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +107,19 @@ class SemanticValidator:
         # Extract source info
         source_text, source_page = self._extract_source_info(qa_result)
 
+        # Determine if re-extraction needed
+        requires_reextraction = False
+        recommended_backend = None
+
+        if not matches and relative_disc is not None and relative_disc > 0.15:
+            # Large discrepancy (>15%) suggests potential OCR error
+            requires_reextraction = True
+            recommended_backend = "easyocr"  # Fallback to more accurate engine
+            logger.warning(
+                f"{variable_name}: Large discrepancy ({relative_disc:.1%}) - "
+                "re-extraction recommended with fallback OCR"
+            )
+
         return ValidationResult(
             parsed_value=parsed_value,
             rag_extracted_value=rag_value,
@@ -116,6 +129,8 @@ class SemanticValidator:
             confidence=final_confidence,
             source_text=source_text,
             source_page=source_page,
+            requires_reextraction=requires_reextraction,
+            recommended_ocr_backend=recommended_backend,
         )
 
     async def validate_summary_statistic(
@@ -195,7 +210,7 @@ class SemanticValidator:
             ValidationResult with match status and confidence
 
         """
-        logger.debug(f"Validating sample size: {parsed_value} (group={group})")
+        logger.info(f"Validating sample size: {parsed_value} (group={group})")
 
         group_context = f" for {group}" if group else ""
         query = f"What is the sample size{group_context}?"
