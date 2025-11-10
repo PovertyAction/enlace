@@ -18,7 +18,7 @@ from enlace.semantic_validator import SemanticValidator
 class TestSemanticValidator:
     """Tests for SemanticValidator class."""
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_init_with_default_config(self, mock_search_pipeline):
         """Test initialization with default configuration."""
         mock_pipeline = MagicMock()
@@ -32,7 +32,7 @@ class TestSemanticValidator:
         assert validator.close_match_threshold == 0.05
         assert validator.warning_threshold == 0.10
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_init_with_custom_config(self, mock_search_pipeline):
         """Test initialization with custom configuration."""
         config = AugmentationConfig(chunk_size=500)
@@ -44,7 +44,7 @@ class TestSemanticValidator:
         assert validator.search == mock_pipeline
 
     @pytest.mark.asyncio
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     async def test_validate_coefficient_exact_match(self, mock_search_pipeline):
         """Test coefficient validation with exact match."""
         mock_pipeline = MagicMock()
@@ -79,7 +79,7 @@ class TestSemanticValidator:
         assert result.source_page == 12
 
     @pytest.mark.asyncio
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     async def test_validate_coefficient_close_match(self, mock_search_pipeline):
         """Test coefficient validation with close match."""
         mock_pipeline = MagicMock()
@@ -105,7 +105,7 @@ class TestSemanticValidator:
         assert result.relative_discrepancy < 0.05
 
     @pytest.mark.asyncio
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     async def test_validate_coefficient_mismatch(self, mock_search_pipeline):
         """Test coefficient validation with mismatch."""
         mock_pipeline = MagicMock()
@@ -132,7 +132,7 @@ class TestSemanticValidator:
         assert result.confidence < 0.8  # Penalized for mismatch
 
     @pytest.mark.asyncio
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     async def test_validate_coefficient_no_rag_value(self, mock_search_pipeline):
         """Test coefficient validation when RAG finds no value."""
         mock_pipeline = MagicMock()
@@ -158,7 +158,7 @@ class TestSemanticValidator:
         assert result.discrepancy_size is None
 
     @pytest.mark.asyncio
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     async def test_validate_summary_statistic_success(self, mock_search_pipeline):
         """Test summary statistic validation."""
         mock_pipeline = MagicMock()
@@ -187,7 +187,7 @@ class TestSemanticValidator:
         assert result.confidence > 0.88
 
     @pytest.mark.asyncio
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     async def test_validate_sample_size_success(self, mock_search_pipeline):
         """Test sample size validation."""
         mock_pipeline = MagicMock()
@@ -212,7 +212,7 @@ class TestSemanticValidator:
         assert result.matches is True
 
     @pytest.mark.asyncio
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     async def test_batch_validate_coefficients(self, mock_search_pipeline):
         """Test batch coefficient validation."""
         mock_pipeline = MagicMock()
@@ -259,7 +259,7 @@ class TestSemanticValidator:
         assert results["var2"].matches is True
 
     @pytest.mark.asyncio
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     async def test_validate_table_summary(self, mock_search_pipeline):
         """Test table validation summary generation."""
         mock_pipeline = MagicMock()
@@ -297,7 +297,7 @@ class TestSemanticValidator:
         assert "average_confidence" in summary
         assert isinstance(summary["flagged_issues"], list)
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_extract_number_from_text_decimal(self, mock_search_pipeline):
         """Test extracting decimal number from text."""
         validator = SemanticValidator()
@@ -306,7 +306,7 @@ class TestSemanticValidator:
 
         assert value == 0.456
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_extract_number_from_text_integer(self, mock_search_pipeline):
         """Test extracting integer from text."""
         validator = SemanticValidator()
@@ -315,7 +315,7 @@ class TestSemanticValidator:
 
         assert value == 5000.0
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_extract_number_from_text_scientific(self, mock_search_pipeline):
         """Test extracting scientific notation."""
         validator = SemanticValidator()
@@ -324,7 +324,7 @@ class TestSemanticValidator:
 
         assert value == 2.5e-4
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_extract_number_from_text_negative(self, mock_search_pipeline):
         """Test extracting negative number."""
         validator = SemanticValidator()
@@ -333,7 +333,7 @@ class TestSemanticValidator:
 
         assert value == -0.345
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_extract_number_from_text_no_number(self, mock_search_pipeline):
         """Test extracting when no number present."""
         validator = SemanticValidator()
@@ -342,7 +342,7 @@ class TestSemanticValidator:
 
         assert value is None
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_compare_values_exact_match(self, mock_search_pipeline):
         """Test value comparison with exact match."""
         validator = SemanticValidator()
@@ -353,7 +353,7 @@ class TestSemanticValidator:
         assert abs_disc == 0.0
         assert rel_disc == 0.0
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_compare_values_close_match(self, mock_search_pipeline):
         """Test value comparison with close match."""
         validator = SemanticValidator()
@@ -364,7 +364,7 @@ class TestSemanticValidator:
         assert abs_disc == pytest.approx(0.002, abs=1e-6)
         assert rel_disc < 0.05
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_compare_values_mismatch(self, mock_search_pipeline):
         """Test value comparison with mismatch."""
         validator = SemanticValidator()
@@ -375,7 +375,7 @@ class TestSemanticValidator:
         assert abs_disc == pytest.approx(0.200, abs=1e-6)
         assert rel_disc > 0.05
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_compare_values_both_zero(self, mock_search_pipeline):
         """Test value comparison with both zeros."""
         validator = SemanticValidator()
@@ -386,7 +386,7 @@ class TestSemanticValidator:
         assert abs_disc == 0.0
         assert rel_disc == 0.0
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_compare_values_one_none(self, mock_search_pipeline):
         """Test value comparison with None."""
         validator = SemanticValidator()
@@ -397,7 +397,7 @@ class TestSemanticValidator:
         assert abs_disc is None
         assert rel_disc is None
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_adjust_confidence_exact_match(self, mock_search_pipeline):
         """Test confidence adjustment for exact match."""
         validator = SemanticValidator()
@@ -410,7 +410,7 @@ class TestSemanticValidator:
         assert adjusted > 0.8
         assert adjusted <= 1.0
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_adjust_confidence_close_match(self, mock_search_pipeline):
         """Test confidence adjustment for close match."""
         validator = SemanticValidator()
@@ -423,7 +423,7 @@ class TestSemanticValidator:
         assert adjusted >= 0.8
         assert adjusted <= 1.0
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_adjust_confidence_minor_mismatch(self, mock_search_pipeline):
         """Test confidence adjustment for minor mismatch."""
         validator = SemanticValidator()
@@ -436,7 +436,7 @@ class TestSemanticValidator:
         assert adjusted < 0.8
         assert adjusted == pytest.approx(0.8 * 0.6)
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_adjust_confidence_major_mismatch(self, mock_search_pipeline):
         """Test confidence adjustment for major mismatch."""
         validator = SemanticValidator()
@@ -449,7 +449,7 @@ class TestSemanticValidator:
         assert adjusted < 0.5
         assert adjusted == pytest.approx(0.8 * 0.3)
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_extract_source_info(self, mock_search_pipeline):
         """Test extracting source info from QA result."""
         validator = SemanticValidator()
@@ -466,7 +466,7 @@ class TestSemanticValidator:
         assert source_text == "First chunk text"
         assert source_page == 12
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_extract_source_info_no_chunks(self, mock_search_pipeline):
         """Test extracting source info with no chunks."""
         validator = SemanticValidator()
@@ -478,7 +478,7 @@ class TestSemanticValidator:
         assert source_text is None
         assert source_page is None
 
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     def test_reset(self, mock_search_pipeline):
         """Test validator reset."""
         mock_pipeline = MagicMock()
@@ -497,7 +497,7 @@ class TestSemanticValidatorIntegration:
     """Integration tests for SemanticValidator."""
 
     @pytest.mark.asyncio
-    @patch("semantic_validator.SemanticSearchPipeline")
+    @patch("enlace.semantic_validator.SemanticSearchPipeline")
     async def test_full_validation_workflow(self, mock_search_pipeline):
         """Test complete validation workflow."""
         mock_pipeline = MagicMock()

@@ -18,8 +18,8 @@ from enlace.semantic_search import SemanticSearchPipeline
 class TestSemanticSearchPipeline:
     """Tests for SemanticSearchPipeline class."""
 
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     def test_init_with_default_config(self, mock_chat, mock_embeddings):
         """Test initialization with default configuration."""
         mock_embeddings_instance = MagicMock()
@@ -39,8 +39,8 @@ class TestSemanticSearchPipeline:
         mock_embeddings.assert_called_once()
         mock_chat.assert_called_once()
 
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     def test_init_with_custom_config(self, mock_chat, mock_embeddings):
         """Test initialization with custom configuration."""
         config = AugmentationConfig(
@@ -59,9 +59,9 @@ class TestSemanticSearchPipeline:
         mock_embeddings.assert_called_once()
         assert mock_embeddings.call_args[1]["model_name"] == "custom/model"
 
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.PdfReader")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.PdfReader")
     def test_extract_text_from_pdf_success(
         self, mock_pdf_reader, mock_chat, mock_embeddings
     ):
@@ -81,7 +81,7 @@ class TestSemanticSearchPipeline:
         # Create temp test PDF
         test_pdf = Path(__file__).parent / "test_data" / "test.pdf"
 
-        with patch("semantic_search.Path.exists", return_value=True):
+        with patch("enlace.semantic_search.Path.exists", return_value=True):
             documents = pipeline._extract_text_from_pdf(str(test_pdf))
 
         assert len(documents) == 2
@@ -91,8 +91,8 @@ class TestSemanticSearchPipeline:
         assert documents[1].page_content == "This is page 2 text."
         assert documents[1].metadata["page"] == 2
 
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     def test_extract_text_from_pdf_file_not_found(self, mock_chat, mock_embeddings):
         """Test PDF extraction with non-existent file."""
         pipeline = SemanticSearchPipeline()
@@ -100,9 +100,9 @@ class TestSemanticSearchPipeline:
         with pytest.raises(FileNotFoundError):
             pipeline._extract_text_from_pdf("/nonexistent/file.pdf")
 
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.PdfReader")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.PdfReader")
     def test_extract_text_from_pdf_error_handling(
         self, mock_pdf_reader, mock_chat, mock_embeddings
     ):
@@ -113,14 +113,14 @@ class TestSemanticSearchPipeline:
 
         test_pdf = Path(__file__).parent / "test_data" / "test.pdf"
 
-        with patch("semantic_search.Path.exists", return_value=True):
+        with patch("enlace.semantic_search.Path.exists", return_value=True):
             with pytest.raises(Exception) as exc_info:
                 pipeline._extract_text_from_pdf(str(test_pdf))
 
             assert "PDF read error" in str(exc_info.value)
 
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     def test_chunk_documents(self, mock_chat, mock_embeddings):
         """Test document chunking."""
         pipeline = SemanticSearchPipeline()
@@ -150,10 +150,10 @@ class TestSemanticSearchPipeline:
             assert "total_chunks_in_page" in chunk.metadata
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.chromadb.Client")
-    @patch("semantic_search.Chroma")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.chromadb.Client")
+    @patch("enlace.semantic_search.Chroma")
     async def test_process_document_success(
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
@@ -185,8 +185,8 @@ class TestSemanticSearchPipeline:
         mock_vectorstore.add_documents.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     async def test_process_document_already_processed(self, mock_chat, mock_embeddings):
         """Test processing already-processed document."""
         pipeline = SemanticSearchPipeline()
@@ -199,8 +199,8 @@ class TestSemanticSearchPipeline:
         mock_extract.assert_not_called()
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     async def test_semantic_search_no_document(self, mock_chat, mock_embeddings):
         """Test semantic search without processed document."""
         pipeline = SemanticSearchPipeline()
@@ -211,8 +211,8 @@ class TestSemanticSearchPipeline:
         assert "No document processed" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     async def test_semantic_search_success(self, mock_chat, mock_embeddings):
         """Test successful semantic search."""
         pipeline = SemanticSearchPipeline()
@@ -238,8 +238,8 @@ class TestSemanticSearchPipeline:
         assert results[1]["similarity_score"] == 0.75
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     async def test_semantic_search_filter_by_threshold(
         self, mock_chat, mock_embeddings
     ):
@@ -264,8 +264,8 @@ class TestSemanticSearchPipeline:
         assert all(r["similarity_score"] >= 0.7 for r in results)
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     async def test_semantic_qa_no_document(self, mock_chat, mock_embeddings):
         """Test semantic QA without processed document."""
         pipeline = SemanticSearchPipeline()
@@ -276,8 +276,8 @@ class TestSemanticSearchPipeline:
         assert "No document processed" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     async def test_semantic_qa_success(self, mock_chat, mock_embeddings):
         """Test successful semantic QA."""
         # Create mock response with proper string content
@@ -300,7 +300,7 @@ class TestSemanticSearchPipeline:
             patch.object(
                 pipeline, "semantic_search", return_value=mock_chunks
             ) as mock_search,
-            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
+            patch("enlace.semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
             # Mock the chain creation (qa_prompt | self.llm)
             mock_prompt_instance = MagicMock()
@@ -318,8 +318,8 @@ class TestSemanticSearchPipeline:
         assert result["question"] == "What is the coefficient?"
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     async def test_semantic_qa_no_chunks_found(self, mock_chat, mock_embeddings):
         """Test semantic QA with no relevant chunks."""
         pipeline = SemanticSearchPipeline()
@@ -335,8 +335,8 @@ class TestSemanticSearchPipeline:
         assert result["confidence"] == 0.0
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     async def test_semantic_qa_llm_error(self, mock_chat, mock_embeddings):
         """Test semantic QA with LLM error."""
         # Mock chain that raises an error
@@ -351,7 +351,7 @@ class TestSemanticSearchPipeline:
 
         with (
             patch.object(pipeline, "semantic_search", return_value=mock_chunks),
-            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
+            patch("enlace.semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
             # Mock the chain creation to raise error
             mock_prompt_instance = MagicMock()
@@ -367,8 +367,8 @@ class TestSemanticSearchPipeline:
         assert "error" in result
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     async def test_batch_qa_async(self, mock_chat, mock_embeddings):
         """Test batch QA with async processing."""
         config = AugmentationConfig(use_async=True, max_concurrent_queries=2)
@@ -394,8 +394,8 @@ class TestSemanticSearchPipeline:
         assert results[2]["question"] == "Q3"
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     async def test_batch_qa_sequential(self, mock_chat, mock_embeddings):
         """Test batch QA with sequential processing."""
         config = AugmentationConfig(use_async=False)
@@ -411,8 +411,8 @@ class TestSemanticSearchPipeline:
 
         assert len(results) == 2
 
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     def test_estimate_confidence_no_answer(self, mock_chat, mock_embeddings):
         """Test confidence estimation with no answer."""
         pipeline = SemanticSearchPipeline()
@@ -421,8 +421,8 @@ class TestSemanticSearchPipeline:
 
         assert confidence == 0.0
 
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     def test_estimate_confidence_with_chunks(self, mock_chat, mock_embeddings):
         """Test confidence estimation with chunks."""
         pipeline = SemanticSearchPipeline()
@@ -440,8 +440,8 @@ class TestSemanticSearchPipeline:
         assert 0.0 < confidence <= 1.0
         assert confidence > 0.5  # Good chunks + good answer
 
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
     def test_reset(self, mock_chat, mock_embeddings):
         """Test pipeline reset."""
         pipeline = SemanticSearchPipeline()
@@ -459,10 +459,10 @@ class TestSemanticSearchIntegration:
     """Integration tests for SemanticSearchPipeline."""
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.chromadb.Client")
-    @patch("semantic_search.Chroma")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.chromadb.Client")
+    @patch("enlace.semantic_search.Chroma")
     async def test_full_pipeline_workflow(
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
@@ -490,7 +490,7 @@ class TestSemanticSearchIntegration:
         with (
             patch.object(pipeline, "_extract_text_from_pdf", return_value=mock_docs),
             patch.object(pipeline, "_chunk_documents", return_value=mock_docs),
-            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
+            patch("enlace.semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
             # Mock the chain creation for QA
             mock_prompt_instance = MagicMock()

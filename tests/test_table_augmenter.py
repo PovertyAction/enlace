@@ -22,12 +22,12 @@ class TestTableAugmenterMethodNameFix:
     """Test the fix for the method name bug in TableAugmenter._get_study_context."""
 
     @pytest.mark.asyncio
-    @patch("table_augmenter.VariableContextExtractor")
-    @patch("table_augmenter.TreatmentContextExtractor")
-    @patch("table_augmenter.StudyContextExtractor")
-    @patch("table_augmenter.MethodsContextExtractor")
-    @patch("table_augmenter.OutcomeContextExtractor")
-    @patch("table_augmenter.SemanticSearchPipeline")
+    @patch("enlace.table_augmenter.VariableContextExtractor")
+    @patch("enlace.table_augmenter.TreatmentContextExtractor")
+    @patch("enlace.table_augmenter.StudyContextExtractor")
+    @patch("enlace.table_augmenter.MethodsContextExtractor")
+    @patch("enlace.table_augmenter.OutcomeContextExtractor")
+    @patch("enlace.table_augmenter.SemanticSearchPipeline")
     async def test_get_study_context_calls_extract_study_context(
         self,
         mock_search_cls,
@@ -43,7 +43,7 @@ class TestTableAugmenterMethodNameFix:
         self.study_extractor.extract_context() which doesn't exist.
         It should call self.study_extractor.extract_study_context().
         """
-        from table_augmenter import TableAugmenter
+        from enlace.table_augmenter import TableAugmenter
 
         # Setup mock search pipeline
         mock_search = MagicMock()
@@ -83,12 +83,12 @@ class TestTableAugmenterMethodNameFix:
         assert result.sample_size == 1000
 
     @pytest.mark.asyncio
-    @patch("table_augmenter.VariableContextExtractor")
-    @patch("table_augmenter.TreatmentContextExtractor")
-    @patch("table_augmenter.StudyContextExtractor")
-    @patch("table_augmenter.MethodsContextExtractor")
-    @patch("table_augmenter.OutcomeContextExtractor")
-    @patch("table_augmenter.SemanticSearchPipeline")
+    @patch("enlace.table_augmenter.VariableContextExtractor")
+    @patch("enlace.table_augmenter.TreatmentContextExtractor")
+    @patch("enlace.table_augmenter.StudyContextExtractor")
+    @patch("enlace.table_augmenter.MethodsContextExtractor")
+    @patch("enlace.table_augmenter.OutcomeContextExtractor")
+    @patch("enlace.table_augmenter.SemanticSearchPipeline")
     async def test_study_context_caching(
         self,
         mock_search_cls,
@@ -99,7 +99,7 @@ class TestTableAugmenterMethodNameFix:
         mock_variable_cls,
     ):
         """Test that study context is cached per document."""
-        from table_augmenter import TableAugmenter
+        from enlace.table_augmenter import TableAugmenter
 
         # Setup mocks
         mock_search = MagicMock()
@@ -131,12 +131,12 @@ class TestTableAugmenterMethodNameFix:
         assert result1 == result2
 
     @pytest.mark.asyncio
-    @patch("table_augmenter.VariableContextExtractor")
-    @patch("table_augmenter.TreatmentContextExtractor")
-    @patch("table_augmenter.StudyContextExtractor")
-    @patch("table_augmenter.MethodsContextExtractor")
-    @patch("table_augmenter.OutcomeContextExtractor")
-    @patch("table_augmenter.SemanticSearchPipeline")
+    @patch("enlace.table_augmenter.VariableContextExtractor")
+    @patch("enlace.table_augmenter.TreatmentContextExtractor")
+    @patch("enlace.table_augmenter.StudyContextExtractor")
+    @patch("enlace.table_augmenter.MethodsContextExtractor")
+    @patch("enlace.table_augmenter.OutcomeContextExtractor")
+    @patch("enlace.table_augmenter.SemanticSearchPipeline")
     async def test_study_context_disabled(
         self,
         mock_search_cls,
@@ -147,7 +147,7 @@ class TestTableAugmenterMethodNameFix:
         mock_variable_cls,
     ):
         """Test that study context extraction is skipped when disabled."""
-        from table_augmenter import TableAugmenter
+        from enlace.table_augmenter import TableAugmenter
 
         # Setup mocks
         mock_search = MagicMock()
@@ -163,12 +163,12 @@ class TestTableAugmenterMethodNameFix:
         assert result is None
 
     @pytest.mark.asyncio
-    @patch("table_augmenter.VariableContextExtractor")
-    @patch("table_augmenter.TreatmentContextExtractor")
-    @patch("table_augmenter.StudyContextExtractor")
-    @patch("table_augmenter.MethodsContextExtractor")
-    @patch("table_augmenter.OutcomeContextExtractor")
-    @patch("table_augmenter.SemanticSearchPipeline")
+    @patch("enlace.table_augmenter.VariableContextExtractor")
+    @patch("enlace.table_augmenter.TreatmentContextExtractor")
+    @patch("enlace.table_augmenter.StudyContextExtractor")
+    @patch("enlace.table_augmenter.MethodsContextExtractor")
+    @patch("enlace.table_augmenter.OutcomeContextExtractor")
+    @patch("enlace.table_augmenter.SemanticSearchPipeline")
     async def test_cache_reset_on_new_document(
         self,
         mock_search_cls,
@@ -179,7 +179,7 @@ class TestTableAugmenterMethodNameFix:
         mock_variable_cls,
     ):
         """Test that cache is reset when processing a new document."""
-        from table_augmenter import TableAugmenter
+        from enlace.table_augmenter import TableAugmenter
 
         # Setup mocks
         mock_search = MagicMock()
@@ -224,7 +224,7 @@ class TestTableAugmenterMethodNameFix:
     @pytest.mark.asyncio
     async def test_table_augmenter_initialization(self):
         """Test that TableAugmenter initializes without errors."""
-        from table_augmenter import TableAugmenter
+        from enlace.table_augmenter import TableAugmenter
 
         # Should initialize with default config
         augmenter = TableAugmenter()
@@ -238,7 +238,7 @@ class TestTableAugmenterMethodNameFix:
     @pytest.mark.asyncio
     async def test_table_augmenter_with_custom_config(self):
         """Test TableAugmenter with custom configuration."""
-        from table_augmenter import TableAugmenter
+        from enlace.table_augmenter import TableAugmenter
 
         config = AugmentationConfig(
             augment_variables=True,
@@ -260,8 +260,8 @@ class TestTableAugmenterExtractorMethods:
     @pytest.mark.asyncio
     async def test_study_extractor_has_extract_study_context_method(self):
         """Verify StudyContextExtractor has extract_study_context method."""
-        from context_extractors import StudyContextExtractor
-        from semantic_search import SemanticSearchPipeline
+        from enlace.context_extractors import StudyContextExtractor
+        from enlace.semantic_search import SemanticSearchPipeline
 
         # Create a mock search pipeline
         mock_search = MagicMock(spec=SemanticSearchPipeline)
@@ -279,8 +279,8 @@ class TestTableAugmenterExtractorMethods:
     @pytest.mark.asyncio
     async def test_variable_extractor_has_extract_context_method(self):
         """Verify VariableContextExtractor has extract_context method."""
-        from context_extractors import VariableContextExtractor
-        from semantic_search import SemanticSearchPipeline
+        from enlace.context_extractors import VariableContextExtractor
+        from enlace.semantic_search import SemanticSearchPipeline
 
         mock_search = MagicMock(spec=SemanticSearchPipeline)
         extractor = VariableContextExtractor(mock_search)
@@ -291,8 +291,8 @@ class TestTableAugmenterExtractorMethods:
     @pytest.mark.asyncio
     async def test_treatment_extractor_has_extract_treatment_arms_method(self):
         """Verify TreatmentContextExtractor has extract_treatment_arms method."""
-        from context_extractors import TreatmentContextExtractor
-        from semantic_search import SemanticSearchPipeline
+        from enlace.context_extractors import TreatmentContextExtractor
+        from enlace.semantic_search import SemanticSearchPipeline
 
         mock_search = MagicMock(spec=SemanticSearchPipeline)
         extractor = TreatmentContextExtractor(mock_search)
@@ -303,8 +303,8 @@ class TestTableAugmenterExtractorMethods:
     @pytest.mark.asyncio
     async def test_methods_extractor_has_extract_methods_for_table_method(self):
         """Verify MethodsContextExtractor has extract_methods_for_table method."""
-        from context_extractors import MethodsContextExtractor
-        from semantic_search import SemanticSearchPipeline
+        from enlace.context_extractors import MethodsContextExtractor
+        from enlace.semantic_search import SemanticSearchPipeline
 
         mock_search = MagicMock(spec=SemanticSearchPipeline)
         extractor = MethodsContextExtractor(mock_search)

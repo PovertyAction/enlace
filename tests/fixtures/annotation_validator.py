@@ -65,7 +65,7 @@ class GroundTruthComparison(BaseModel):
     treatment_mean: float | None = None
     treatment_sd: float | None = None
     treatment_n: int | None = None
-    difference: float | None = None
+    difference: float | str | None = None  # Allow string for values like ".04**"
     p_value: float | None = None
     normalized_difference: float | None = None
 
@@ -74,7 +74,7 @@ class GroundTruthTable(BaseModel):
     """Ground truth for a single table."""
 
     table_id: str
-    table_number: str
+    table_number: str | None = None
     title: str | None = None
     page_number: int | None = None
     table_type: str = Field(
@@ -119,7 +119,7 @@ class GroundTruthFigure(BaseModel):
     """Ground truth for a figure."""
 
     figure_id: str
-    figure_number: str
+    figure_number: str | None = None
     caption: str | None = None
     page_number: int | None = None
     figure_type: str | None = Field(

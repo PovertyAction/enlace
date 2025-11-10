@@ -20,10 +20,10 @@ class TestSemanticAugmentationPipeline:
     """Integration tests for the complete semantic augmentation pipeline."""
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.chromadb.Client")
-    @patch("semantic_search.Chroma")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.chromadb.Client")
+    @patch("enlace.semantic_search.Chroma")
     async def test_complete_pipeline_with_mocks(
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
@@ -67,7 +67,7 @@ class TestSemanticAugmentationPipeline:
                 search_pipeline, "_extract_text_from_pdf", return_value=mock_docs
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=mock_docs),
-            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
+            patch("enlace.semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
             # Mock the chain creation for QA
             mock_prompt_instance = MagicMock()
@@ -117,10 +117,10 @@ class TestSemanticAugmentationPipeline:
             assert validation_result.confidence > 0.8
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.chromadb.Client")
-    @patch("semantic_search.Chroma")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.chromadb.Client")
+    @patch("enlace.semantic_search.Chroma")
     async def test_pipeline_with_multiple_tables(
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
@@ -169,7 +169,7 @@ class TestSemanticAugmentationPipeline:
                 search_pipeline, "_extract_text_from_pdf", return_value=mock_docs
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=mock_docs),
-            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
+            patch("enlace.semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
             # Mock the chain creation
             mock_prompt_instance = MagicMock()
@@ -198,10 +198,10 @@ class TestSemanticAugmentationPipeline:
             assert result2.matches is True
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.chromadb.Client")
-    @patch("semantic_search.Chroma")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.chromadb.Client")
+    @patch("enlace.semantic_search.Chroma")
     async def test_pipeline_detects_parsing_errors(
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
@@ -230,7 +230,7 @@ class TestSemanticAugmentationPipeline:
                 search_pipeline, "_extract_text_from_pdf", return_value=mock_docs
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=mock_docs),
-            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
+            patch("enlace.semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
             # Mock the chain creation
             mock_prompt_instance = MagicMock()
@@ -257,10 +257,10 @@ class TestSemanticAugmentationPipeline:
             assert result.relative_discrepancy > 0.05
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.chromadb.Client")
-    @patch("semantic_search.Chroma")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.chromadb.Client")
+    @patch("enlace.semantic_search.Chroma")
     async def test_pipeline_batch_validation(
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
@@ -303,7 +303,7 @@ class TestSemanticAugmentationPipeline:
                 search_pipeline, "_extract_text_from_pdf", return_value=[mock_doc]
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=[mock_doc]),
-            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
+            patch("enlace.semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
             # Mock the chain creation
             mock_prompt_instance = MagicMock()
@@ -332,10 +332,10 @@ class TestSemanticAugmentationPipeline:
             assert all(r.matches for r in results.values())
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.chromadb.Client")
-    @patch("semantic_search.Chroma")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.chromadb.Client")
+    @patch("enlace.semantic_search.Chroma")
     async def test_pipeline_table_validation_summary(
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
@@ -360,7 +360,7 @@ class TestSemanticAugmentationPipeline:
                 search_pipeline, "_extract_text_from_pdf", return_value=[mock_doc]
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=[mock_doc]),
-            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
+            patch("enlace.semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
             # Mock the chain creation
             mock_prompt_instance = MagicMock()
@@ -397,10 +397,10 @@ class TestSemanticAugmentationPipeline:
             assert isinstance(summary["flagged_issues"], list)
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.chromadb.Client")
-    @patch("semantic_search.Chroma")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.chromadb.Client")
+    @patch("enlace.semantic_search.Chroma")
     async def test_pipeline_handles_missing_data(
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
@@ -442,10 +442,10 @@ class TestSemanticAugmentationPipeline:
             assert result.confidence < 0.5
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.chromadb.Client")
-    @patch("semantic_search.Chroma")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.chromadb.Client")
+    @patch("enlace.semantic_search.Chroma")
     async def test_pipeline_reset_and_reprocess(
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
@@ -493,10 +493,10 @@ class TestSemanticAugmentationWorkflows:
     """Test realistic workflows that mirror actual usage."""
 
     @pytest.mark.asyncio
-    @patch("semantic_search.HuggingFaceEmbeddings")
-    @patch("semantic_search.ChatAnthropic")
-    @patch("semantic_search.chromadb.Client")
-    @patch("semantic_search.Chroma")
+    @patch("enlace.semantic_search.HuggingFaceEmbeddings")
+    @patch("enlace.semantic_search.ChatAnthropic")
+    @patch("enlace.semantic_search.chromadb.Client")
+    @patch("enlace.semantic_search.Chroma")
     async def test_realistic_research_paper_workflow(
         self, mock_chroma, mock_chroma_client, mock_chat, mock_embeddings
     ):
@@ -559,7 +559,7 @@ class TestSemanticAugmentationWorkflows:
                 search_pipeline, "_extract_text_from_pdf", return_value=mock_docs
             ),
             patch.object(search_pipeline, "_chunk_documents", return_value=mock_docs),
-            patch("semantic_search.ChatPromptTemplate") as mock_prompt,
+            patch("enlace.semantic_search.ChatPromptTemplate") as mock_prompt,
         ):
             # Mock the chain creation
             mock_prompt_instance = MagicMock()
