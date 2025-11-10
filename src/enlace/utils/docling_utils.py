@@ -5,19 +5,28 @@ and extracting structured content using the docling library.
 """
 
 import logging
+import os
 from pathlib import Path
-
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.document_converter import (
-    ConversionResult,
-    DocumentConverter,
-    PdfFormatOption,
-)
 
 from enlace.exceptions import ExtractionError, UnsupportedFormatError
 
 logger = logging.getLogger("enlace.utils.docling")
+
+# Set TESSDATA_PREFIX before docling imports tesserocr
+# This must happen before any docling imports that might trigger tesserocr initialization
+from enlace.utils.ocr_options import _detect_tessdata_path  # noqa: E402
+
+if "TESSDATA_PREFIX" not in os.environ and (tessdata_path := _detect_tessdata_path()):
+    os.environ["TESSDATA_PREFIX"] = tessdata_path
+    logger.debug(f"Set TESSDATA_PREFIX={tessdata_path}")
+
+from docling.datamodel.base_models import InputFormat  # noqa: E402
+from docling.datamodel.pipeline_options import PdfPipelineOptions  # noqa: E402
+from docling.document_converter import (  # noqa: E402
+    ConversionResult,
+    DocumentConverter,
+    PdfFormatOption,
+)
 
 
 def convert_pdf_to_markdown(

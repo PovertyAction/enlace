@@ -64,6 +64,64 @@ class ExtractionConfig(BaseSettings):
         default=True, description="Extract metadata from papers"
     )
 
+    # VLM Enhancement (Granite-Docling + Claude)
+    enable_vlm: bool = Field(
+        default=False,
+        description="Enable VLM fallback for low-quality table extractions",
+    )
+    vlm_backend: str = Field(
+        default="granite",
+        description="VLM backend: granite (Granite-Docling-258M), claude, or both",
+    )
+    vlm_model: str = Field(
+        default="granite-docling",
+        description="VLM model identifier for Granite-Docling",
+    )
+    vlm_framework: str = Field(
+        default="auto",
+        description="VLM inference framework: auto, transformers, or mlx (macOS only)",
+    )
+    vlm_null_se_threshold: float = Field(
+        default=0.30,
+        ge=0.0,
+        le=1.0,
+        description="Trigger VLM if >X% standard errors are missing (0.0-1.0)",
+    )
+    vlm_null_coef_threshold: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description="Trigger VLM if >X% coefficients are missing (0.0-1.0)",
+    )
+    vlm_confidence_threshold: float = Field(
+        default=0.70,
+        ge=0.0,
+        le=1.0,
+        description="Trigger VLM if OCR confidence <X (0.0-1.0)",
+    )
+
+    # Claude Cleanup Pass (Pass 2)
+    enable_claude_cleanup: bool = Field(
+        default=False,
+        description="Enable Claude cleanup pass for final validation (requires API key)",
+    )
+    claude_model: str = Field(
+        default="claude-3-5-sonnet-20241022",
+        description="Claude model for cleanup pass",
+    )
+    claude_api_key: str | None = Field(
+        default=None, description="Anthropic API key for Claude cleanup"
+    )
+    claude_null_se_threshold: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description="Trigger Claude cleanup if >X% SEs still missing after Granite",
+    )
+    claude_max_cost_per_table: float = Field(
+        default=0.05, description="Maximum cost per table for Claude API ($)"
+    )
+
     # Semantic augmentation
     enable_augmentation: bool = Field(
         default=False, description="Enable semantic augmentation with RAG"

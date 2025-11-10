@@ -56,7 +56,9 @@ class PaperExtractor:
         """
         self.config = config
         self.parser = TableParser(
-            enable_ocr=config.enable_ocr, extract_figures=config.extract_figures
+            enable_ocr=config.enable_ocr,
+            extract_figures=config.extract_figures,
+            config=config,  # Pass config for VLM settings
         )
 
         # Initialize OCR backend manager
@@ -233,13 +235,13 @@ class PaperExtractor:
                     table_type = self._get_table_type(table)
 
                     if table_type == "regression":
-                        _context = await self.table_augmenter.augment_regression_table(
+                        context = await self.table_augmenter.augment_regression_table(
                             table,
                             table.table_number or "unknown",
                             str(extraction.source_file),
                         )
                     elif table_type in ["summary", "descriptive"]:
-                        _context = (
+                        context = (
                             await self.table_augmenter.augment_summary_stats_table(
                                 table,
                                 table.table_number or "unknown",
@@ -247,22 +249,21 @@ class PaperExtractor:
                             )
                         )
                     elif table_type == "balance":
-                        _context = await self.table_augmenter.augment_balance_table(
+                        context = await self.table_augmenter.augment_balance_table(
                             table,
                             table.table_number or "unknown",
                             str(extraction.source_file),
                         )
                     else:
                         # Default to regression augmentation
-                        _context = await self.table_augmenter.augment_regression_table(
+                        context = await self.table_augmenter.augment_regression_table(
                             table,
                             table.table_number or "unknown",
                             str(extraction.source_file),
                         )
 
-                    # Add semantic context to table
-                    # Note: This modifies the table object in place
-                    # The actual implementation depends on table_augmenter API
+                    # Apply semantic context to table object
+                    self._apply_augmentation_context(table, context)
 
                     augmented_tables.append(table)
 
@@ -316,6 +317,81 @@ class PaperExtractor:
             return "balance"
         else:
             return "other"
+
+    def _apply_augmentation_context(self, table, context):
+        """Apply TableContext to table object.
+
+        Modifies table in place by adding semantic context fields.
+
+        Args:
+            table: RegressionTable, SummaryStatisticsTable, or BalanceTable
+            context: TableContext object from augmentation
+
+        """
+        # Apply top-level context fields
+        if hasattr(table, "study_context"):
+            table.study_context = (
+                context.study_context.model_dump() if context.study_context else None
+            )
+
+        if hasattr(table, "treatment_contexts"):
+            table.treatment_contexts = [
+                tc.model_dump() for tc in context.treatment_contexts
+            ]
+
+        if hasattr(table, "methods_context"):
+            table.methods_context = (
+                context.methods_context.model_dump()
+                if context.methods_context
+                else None
+            )
+
+        # Apply variable-level contexts to coefficients/variables
+        if hasattr(table, "models"):
+            # Regression table: apply to coefficients
+            for model in table.models:
+                if hasattr(model, "outcome_context") and context.outcome_contexts:
+                    # Apply outcome context from dependent variable
+                    dep_var = model.dependent_variable
+                    if dep_var and dep_var in context.outcome_contexts:
+                        model.outcome_context = context.outcome_contexts[
+                            dep_var
+                        ].model_dump()
+
+                if hasattr(model, "coefficients"):
+                    for coef in model.coefficients:
+                        var_name = coef.variable_name
+                        if var_name in context.variable_contexts:
+                            var_ctx = context.variable_contexts[var_name]
+                            coef.variable_context = var_ctx.model_dump()
+
+                            # Add validation if available
+                            if hasattr(var_ctx, "validation") and var_ctx.validation:
+                                coef.validation = var_ctx.validation
+
+        elif hasattr(table, "statistics"):
+            # Summary stats table: apply to statistics
+            for stat in table.statistics:
+                var_name = stat.variable_name
+                if var_name in context.variable_contexts:
+                    var_ctx = context.variable_contexts[var_name]
+                    if hasattr(stat, "variable_context"):
+                        stat.variable_context = var_ctx.model_dump()
+
+        elif hasattr(table, "comparisons"):
+            # Balance table: apply to comparisons
+            for comp in table.comparisons:
+                var_name = comp.variable_name
+                if var_name in context.variable_contexts:
+                    var_ctx = context.variable_contexts[var_name]
+                    if hasattr(comp, "variable_context"):
+                        comp.variable_context = var_ctx.model_dump()
+
+        logger.debug(
+            f"Applied augmentation context to table: "
+            f"{len(context.variable_contexts)} variables, "
+            f"{len(context.outcome_contexts)} outcomes"
+        )
 
     def _calculate_quality_score(self, result: ExtractionResult) -> float:
         """Calculate overall extraction quality score (0-1).

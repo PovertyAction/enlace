@@ -33,16 +33,26 @@ logger = logging.getLogger("enlace.core.parser")
 class TableParser:
     """Parse structured tables and figures from research papers."""
 
-    def __init__(self, enable_ocr: bool = False, extract_figures: bool = True):
+    def __init__(
+        self,
+        enable_ocr: bool = False,
+        extract_figures: bool = True,
+        config=None,
+    ):
         """Initialize table parser.
 
         Args:
             enable_ocr: Enable OCR for scanned documents
             extract_figures: Extract figures/images from documents
+            config: Optional ExtractionConfig for VLM settings
 
         """
         self.enable_ocr = enable_ocr
         self.extract_figures = extract_figures
+        self.config = config
+
+        # VLM extractor (lazy-loaded)
+        self.vlm_extractor = None
 
         # Configure docling converter
         table_structure_options = TableStructureOptions(do_cell_matching=True)
@@ -387,6 +397,98 @@ class TableParser:
                     context_text.pop(0)
 
         return " ".join(context_text) if context_text else ""
+
+    def _calculate_table_quality(self, table) -> dict[str, Any]:
+        """Calculate quality metrics for a parsed regression table.
+
+        Args:
+            table: Parsed RegressionTable object
+
+        Returns:
+            Dictionary with quality metrics:
+                - null_se_rate: Proportion of missing standard errors (0.0-1.0)
+                - null_coef_rate: Proportion of missing coefficients (0.0-1.0)
+                - avg_ocr_confidence: Average OCR confidence if available
+                - needs_vlm: Boolean indicating if VLM fallback recommended
+
+        """
+        if not hasattr(table, "models") or not table.models:
+            return {
+                "null_se_rate": 1.0,
+                "null_coef_rate": 1.0,
+                "avg_ocr_confidence": None,
+                "needs_vlm": True,
+            }
+
+        total_coefficients = 0
+        missing_se = 0
+        missing_coef = 0
+        ocr_confidences = []
+
+        for model in table.models:
+            if not hasattr(model, "coefficients"):
+                continue
+
+            for coef in model.coefficients:
+                total_coefficients += 1
+
+                # Check for missing standard error
+                if coef.std_error is None:
+                    missing_se += 1
+
+                # Check for missing coefficient
+                if coef.coefficient is None:
+                    missing_coef += 1
+
+                # Collect OCR confidence if available
+                if hasattr(coef, "ocr_confidence") and coef.ocr_confidence is not None:
+                    ocr_confidences.append(coef.ocr_confidence)
+
+        # Calculate rates
+        null_se_rate = (
+            missing_se / total_coefficients if total_coefficients > 0 else 1.0
+        )
+        null_coef_rate = (
+            missing_coef / total_coefficients if total_coefficients > 0 else 1.0
+        )
+        avg_ocr_confidence = (
+            sum(ocr_confidences) / len(ocr_confidences) if ocr_confidences else None
+        )
+
+        # Determine if VLM fallback is needed based on config thresholds
+        needs_vlm = False
+        if self.config and self.config.enable_vlm:
+            if null_se_rate > self.config.vlm_null_se_threshold:
+                needs_vlm = True
+                logger.debug(
+                    f"VLM trigger: null_se_rate={null_se_rate:.2%} > "
+                    f"threshold={self.config.vlm_null_se_threshold:.2%}"
+                )
+            elif null_coef_rate > self.config.vlm_null_coef_threshold:
+                needs_vlm = True
+                logger.debug(
+                    f"VLM trigger: null_coef_rate={null_coef_rate:.2%} > "
+                    f"threshold={self.config.vlm_null_coef_threshold:.2%}"
+                )
+            elif (
+                avg_ocr_confidence is not None
+                and avg_ocr_confidence < self.config.vlm_confidence_threshold
+            ):
+                needs_vlm = True
+                logger.debug(
+                    f"VLM trigger: avg_ocr_confidence={avg_ocr_confidence:.2f} < "
+                    f"threshold={self.config.vlm_confidence_threshold:.2f}"
+                )
+
+        return {
+            "null_se_rate": null_se_rate,
+            "null_coef_rate": null_coef_rate,
+            "avg_ocr_confidence": avg_ocr_confidence,
+            "total_coefficients": total_coefficients,
+            "missing_se": missing_se,
+            "missing_coef": missing_coef,
+            "needs_vlm": needs_vlm,
+        }
 
     def _extract_picture_caption(self, picture: PictureItem) -> str:
         """Extract caption from picture element."""

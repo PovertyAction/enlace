@@ -165,12 +165,12 @@ class TableAugmenter:
         )
 
         # Build comprehensive TableContext
-        # Get caption from Pydantic model or dict
-        caption = (
-            table_data.caption
-            if hasattr(table_data, "caption")
-            else table_data.get("caption", "Regression results")
-        )
+        # Get title from Pydantic model or dict
+        caption = getattr(table_data, "title", None) or "Regression results"
+        if isinstance(table_data, dict):
+            caption = table_data.get(
+                "title", table_data.get("caption", "Regression results")
+            )
 
         table_context = TableContext(
             table_id=table_id,
@@ -245,12 +245,12 @@ class TableAugmenter:
             study_context, treatment_contexts, variable_contexts, {}, None
         )
 
-        # Get caption from Pydantic model or dict
-        caption = (
-            table_data.caption
-            if hasattr(table_data, "caption")
-            else table_data.get("caption", "Summary statistics")
-        )
+        # Get title from Pydantic model or dict
+        caption = getattr(table_data, "title", None) or "Summary statistics"
+        if isinstance(table_data, dict):
+            caption = table_data.get(
+                "title", table_data.get("caption", "Summary statistics")
+            )
 
         table_context = TableContext(
             table_id=table_id,
@@ -322,12 +322,12 @@ class TableAugmenter:
             study_context, treatment_contexts, variable_contexts, {}, None
         )
 
-        # Get caption from Pydantic model or dict
-        caption = (
-            table_data.caption
-            if hasattr(table_data, "caption")
-            else table_data.get("caption", "Balance table")
-        )
+        # Get title from Pydantic model or dict
+        caption = getattr(table_data, "title", None) or "Balance table"
+        if isinstance(table_data, dict):
+            caption = table_data.get(
+                "title", table_data.get("caption", "Balance table")
+            )
 
         table_context = TableContext(
             table_id=table_id,
@@ -396,34 +396,28 @@ class TableAugmenter:
         variables = set()
 
         # Handle regression table structure (Pydantic or dict)
-        models = (
-            table_data.models
-            if hasattr(table_data, "models")
-            else table_data.get("models", [])
-        )
+        models = getattr(table_data, "models", None)
+        if models is None and isinstance(table_data, dict):
+            models = table_data.get("models", [])
+
         if models:
             for model in models:
-                coefficients = (
-                    model.coefficients
-                    if hasattr(model, "coefficients")
-                    else model.get("coefficients", [])
-                )
+                coefficients = getattr(model, "coefficients", None)
+                if coefficients is None and isinstance(model, dict):
+                    coefficients = model.get("coefficients", [])
+
                 for coef in coefficients:
-                    var_name = (
-                        coef.variable_name
-                        if hasattr(coef, "variable_name")
-                        else coef.get("variable", coef.get("variable_name"))
-                    )
+                    var_name = getattr(coef, "variable_name", None)
+                    if var_name is None and isinstance(coef, dict):
+                        var_name = coef.get("variable", coef.get("variable_name"))
                     if var_name:
                         variables.add(var_name)
 
         # Handle summary stats / balance table structure
         else:
-            table_variables = (
-                table_data.variables
-                if hasattr(table_data, "variables")
-                else table_data.get("variables", [])
-            )
+            table_variables = getattr(table_data, "variables", None)
+            if table_variables is None and isinstance(table_data, dict):
+                table_variables = table_data.get("variables", [])
             if table_variables:
                 for var in table_variables:
                     if hasattr(var, "name") and var.name:
@@ -435,11 +429,9 @@ class TableAugmenter:
 
             # Fallback: try to extract from any row/column data
             else:
-                rows = (
-                    table_data.rows
-                    if hasattr(table_data, "rows")
-                    else table_data.get("rows", [])
-                )
+                rows = getattr(table_data, "rows", None)
+                if rows is None and isinstance(table_data, dict):
+                    rows = table_data.get("rows", [])
                 for row in rows:
                     var_name = (
                         row.variable
@@ -468,11 +460,9 @@ class TableAugmenter:
 
         # Regression tables: outcome is often in model metadata
         # Handle both Pydantic models and dicts
-        models = (
-            table_data.models
-            if hasattr(table_data, "models")
-            else table_data.get("models", [])
-        )
+        models = getattr(table_data, "models", None)
+        if models is None and isinstance(table_data, dict):
+            models = table_data.get("models", [])
         if models:
             for model in models:
                 # Handle both Pydantic and dict models
@@ -486,12 +476,10 @@ class TableAugmenter:
                     elif "dependent_variable" in model:
                         outcomes.add(model["dependent_variable"])
 
-        # Try to get from caption or description
-        caption = (
-            table_data.caption
-            if hasattr(table_data, "caption")
-            else table_data.get("caption", "")
-        )
+        # Try to get from title or description
+        caption = getattr(table_data, "title", None) or ""
+        if not caption and isinstance(table_data, dict):
+            caption = table_data.get("title", table_data.get("caption", ""))
         if caption and "outcome:" in caption.lower():
             # Simple extraction - could be improved with regex
             pass

@@ -18,18 +18,12 @@ cd enlace
 
 # Install with uv (recommended)
 uv pip install -e .
-
-# Or install with pip
-pip install -e .
-
-# Install with development dependencies
-uv pip install -e ".[dev]"
 ```
 
 ### Verify Installation
 
 ```bash
-enlace --help
+uv run enlace --help
 ```
 
 You should see the main help message with available commands.
@@ -40,42 +34,42 @@ You should see the main help message with available commands.
 
 ```bash
 # Basic extraction (no OCR, no augmentation)
-enlace extract paper.pdf
+uv run enlace extract paper.pdf
 
 # With output directory
-enlace extract paper.pdf --output output/
+uv run enlace extract paper.pdf --output output/
 
 # Enable OCR for scanned documents
-enlace extract paper.pdf --ocr auto
+uv run enlace extract paper.pdf --ocr auto
 
 # Enable semantic augmentation
-enlace extract paper.pdf --augment
+uv run enlace extract paper.pdf --augment
 ```
 
 ### Validate Extraction Results
 
 ```bash
 # Validate with standard checks
-enlace validate output/paper/extraction.json
+uv run enlace validate output/paper/extraction.json
 
 # Use comprehensive validation
-enlace validate output/paper/extraction.json --level comprehensive
+uv run enlace validate output/paper/extraction.json --level comprehensive
 
 # Fail on validation issues (exit code 1)
-enlace validate output/paper/extraction.json --fail-on-issues
+uv run enlace validate output/paper/extraction.json --fail-on-issues
 ```
 
 ### Batch Processing
 
 ```bash
 # Process all papers in a directory
-enlace batch papers/ --output batch_output/
+uv run enlace batch papers/ --output batch_output/
 
 # With 8 parallel workers
-enlace batch papers/ --workers 8
+uv run enlace batch papers/ --workers 8
 
 # With augmentation and validation
-enlace batch papers/ --augment --validate --validation-level comprehensive
+uv run enlace batch papers/ --augment --validate --validation-level comprehensive
 ```
 
 ## Commands
@@ -87,7 +81,7 @@ Extract tables, figures, and metadata from research papers.
 **Usage:**
 
 ```bash
-enlace extract [OPTIONS] INPUT_PATH
+uv run enlace extract [OPTIONS] INPUT_PATH
 ```
 
 **Arguments:**
@@ -100,6 +94,9 @@ enlace extract [OPTIONS] INPUT_PATH
 |--------|-------|---------|-------------|
 | `--output` | `-o` | `output` | Output directory for results |
 | `--augment` | | `False` | Enable semantic augmentation with RAG |
+| `--vlm` | | `False` | Enable VLM fallback for low-quality tables |
+| `--vlm-framework` | | `auto` | VLM framework (auto, transformers, mlx) |
+| `--claude-cleanup` | | `False` | Enable Claude cleanup pass (requires API key) |
 | `--ocr` | | `None` | Enable OCR (auto, tesseract, easyocr) |
 | `--ocr-confidence` | | `0.8` | OCR confidence threshold (0.0-1.0) |
 | `--no-hybrid-ocr` | | `False` | Disable hybrid OCR fallback |
@@ -111,26 +108,35 @@ enlace extract [OPTIONS] INPUT_PATH
 
 ```bash
 # Basic extraction
-enlace extract paper.pdf
+uv run enlace extract paper.pdf
 
 # With OCR (auto mode = Tesseract + EasyOCR fallback)
-enlace extract scanned_paper.pdf --ocr auto
+uv run enlace extract scanned_paper.pdf --ocr auto
 
 # Specify OCR backend explicitly
-enlace extract paper.pdf --ocr tesseract
-enlace extract paper.pdf --ocr easyocr
+uv run enlace extract paper.pdf --ocr tesseract
+uv run enlace extract paper.pdf --ocr easyocr
 
 # Customize OCR confidence threshold
-enlace extract paper.pdf --ocr auto --ocr-confidence 0.9
+uv run enlace extract paper.pdf --ocr auto --ocr-confidence 0.9
 
 # Disable hybrid fallback (use only primary backend)
-enlace extract paper.pdf --ocr tesseract --no-hybrid-ocr
+uv run enlace extract paper.pdf --ocr tesseract --no-hybrid-ocr
 
 # Full pipeline with augmentation and CSV output
-enlace extract paper.pdf --augment --ocr auto --format both -o results/
+uv run enlace extract paper.pdf --augment --ocr auto --format both -o results/
+
+# Enable VLM fallback for complex tables (Granite-Docling)
+uv run enlace extract paper.pdf --vlm --ocr auto
+
+# VLM with specific framework (faster on macOS)
+uv run enlace extract paper.pdf --vlm --vlm-framework mlx
+
+# Two-pass VLM: Granite + Claude cleanup (highest accuracy)
+uv run enlace extract paper.pdf --vlm --claude-cleanup --ocr auto
 
 # Using configuration file
-enlace extract paper.pdf --config .enlace.toml
+uv run enlace extract paper.pdf --config .enlace.toml
 ```
 
 **Output:**
@@ -164,7 +170,7 @@ Validate extracted research data quality.
 **Usage:**
 
 ```bash
-enlace validate [OPTIONS] EXTRACTION_PATH
+uv run enlace validate [OPTIONS] EXTRACTION_PATH
 ```
 
 **Arguments:**
@@ -203,22 +209,22 @@ enlace validate [OPTIONS] EXTRACTION_PATH
 
 ```bash
 # Validate with standard level
-enlace validate output/paper/extraction.json
+uv run enlace validate output/paper/extraction.json
 
 # Quick validation
-enlace validate output/paper/extraction.json --level quick
+uv run enlace validate output/paper/extraction.json --level quick
 
 # Comprehensive validation with custom output
-enlace validate output/paper/extraction.json \
+uv run enlace validate output/paper/extraction.json \
     --level comprehensive \
     --output validation/ \
     --fail-on-issues
 
 # Validate entire directory
-enlace validate output/
+uv run enlace validate output/
 
 # Using configuration file
-enlace validate output/paper/extraction.json --config .enlace.toml
+uv run enlace validate output/paper/extraction.json --config .enlace.toml
 ```
 
 **Output:**
@@ -257,7 +263,7 @@ Process multiple papers in batch with parallel processing.
 **Usage:**
 
 ```bash
-enlace batch [OPTIONS] INPUT_DIR
+uv run enlace batch [OPTIONS] INPUT_DIR
 ```
 
 **Arguments:**
@@ -281,13 +287,13 @@ enlace batch [OPTIONS] INPUT_DIR
 
 ```bash
 # Process all papers with default settings
-enlace batch papers/
+uv run enlace batch papers/
 
 # High-performance batch processing
-enlace batch papers/ --workers 8 --output results/
+uv run enlace batch papers/ --workers 8 --output results/
 
 # Full pipeline with augmentation and validation
-enlace batch papers/ \
+uv run enlace batch papers/ \
     --augment \
     --ocr auto \
     --validate \
@@ -295,10 +301,10 @@ enlace batch papers/ \
     --workers 4
 
 # Process without validation
-enlace batch papers/ --no-validate
+uv run enlace batch papers/ --no-validate
 
 # Using configuration file
-enlace batch papers/ --config .enlace.toml
+uv run enlace batch papers/ --config .enlace.toml
 ```
 
 **Output:**
@@ -340,6 +346,166 @@ batch_output/
 
 - `0` - Success (even if some papers failed)
 - `1` - Batch processing error
+
+---
+
+## Vision-Language Model (VLM) Integration
+
+### Overview
+
+enlace supports **two-pass VLM extraction** for improved accuracy on complex tables:
+
+1. **Pass 1: Granite-Docling-258M** (Local, Fast)
+   - IBM's 258M parameter VLM optimized for document understanding
+   - 97% accuracy on table structure recognition (TEDS benchmark)
+   - Runs locally (no API costs)
+   - Inference: 6-10s (MLX on macOS) or 80-120s (Transformers)
+
+2. **Pass 2: Claude 3.5 Sonnet** (Optional, Validation)
+   - Final validation and cleanup using Claude's vision capabilities
+   - Cross-validates with paper text
+   - Only triggered for low-quality Granite extractions
+   - Cost: ~$0.01-0.05 per table
+
+### When VLM is Triggered
+
+VLM fallback activates automatically when **any** condition is met:
+
+- **>30% missing standard errors** (default threshold)
+- **>20% missing coefficients** (default threshold)
+- **OCR confidence <70%** (default threshold)
+
+### VLM Usage Examples
+
+```bash
+# Enable Granite-Docling VLM fallback
+uv run enlace extract paper.pdf --vlm --ocr auto
+
+# Specify VLM framework (auto-detects best option)
+uv run enlace extract paper.pdf --vlm --vlm-framework auto
+
+# Use MLX framework on macOS (10-20x faster)
+uv run enlace extract paper.pdf --vlm --vlm-framework mlx
+
+# Use Transformers framework (cross-platform)
+uv run enlace extract paper.pdf --vlm --vlm-framework transformers
+
+# Two-pass VLM: Granite + Claude cleanup
+export ENLACE_CLAUDE_API_KEY=sk-ant-...
+uv run enlace extract paper.pdf --vlm --claude-cleanup --ocr auto
+
+# Configure VLM thresholds
+export ENLACE_VLM_NULL_SE_THRESHOLD=0.25  # Trigger if >25% SEs missing
+export ENLACE_VLM_NULL_COEF_THRESHOLD=0.15  # Trigger if >15% coeffs missing
+uv run enlace extract paper.pdf --vlm
+```
+
+### VLM Configuration
+
+#### Environment Variables
+
+```bash
+# Enable VLM
+export ENLACE_ENABLE_VLM=true
+export ENLACE_VLM_FRAMEWORK=auto  # auto, transformers, or mlx
+
+# Quality triggers
+export ENLACE_VLM_NULL_SE_THRESHOLD=0.30  # Default: 30%
+export ENLACE_VLM_NULL_COEF_THRESHOLD=0.20  # Default: 20%
+export ENLACE_VLM_CONFIDENCE_THRESHOLD=0.70  # Default: 70%
+
+# Claude cleanup (optional)
+export ENLACE_ENABLE_CLAUDE_CLEANUP=true
+export ENLACE_CLAUDE_API_KEY=sk-ant-...
+export ENLACE_CLAUDE_MODEL=claude-3-5-sonnet-20241022
+export ENLACE_CLAUDE_NULL_SE_THRESHOLD=0.15  # Trigger if >15% still missing
+export ENLACE_CLAUDE_MAX_COST_PER_TABLE=0.05  # Budget limit ($)
+```
+
+#### Configuration File
+
+```toml
+[tool.enlace]
+# VLM settings
+enable_vlm = true
+vlm_framework = "auto"
+vlm_null_se_threshold = 0.30
+vlm_null_coef_threshold = 0.20
+vlm_confidence_threshold = 0.70
+
+# Claude cleanup (optional)
+enable_claude_cleanup = false
+claude_api_key = "sk-ant-..."
+claude_null_se_threshold = 0.15
+claude_max_cost_per_table = 0.05
+```
+
+### VLM Performance
+
+#### Expected Accuracy Improvements
+
+| Metric | Traditional | + Granite | + Claude | Target |
+|--------|------------|-----------|----------|--------|
+| **Standard Errors** | 6.4% | ~70% | **85-90%** | 85%+ |
+| **Coefficients** | 88% | 92% | **95%+** | 95%+ |
+| **Dependent Variables** | 73% | 85% | **90%+** | 90%+ |
+
+#### Inference Times
+
+| Framework | Platform | Time/Table | GPU Required |
+|-----------|----------|------------|--------------|
+| MLX | macOS M1/M2/M3 | 6-10s | MPS (Apple) |
+| Transformers | macOS | 100-120s | Optional (CUDA) |
+| Transformers | Linux/Windows | 80-100s | Optional (CUDA) |
+
+#### Cost Analysis
+
+| Strategy | Time | Cost | Use Case |
+|----------|------|------|----------|
+| Traditional only | 5-10s | $0 | High-quality PDFs |
+| + Granite | 15-110s | $0 | Complex tables, scanned docs |
+| + Claude cleanup | 17-115s | $0.01-0.05 | Critical extractions |
+
+### VLM Troubleshooting
+
+#### VLM Dependencies Missing
+
+```bash
+# VLM dependencies already included in enlace
+# Verify installation:
+uv pip install "docling[vlm]>=2.60.1"
+```
+
+#### MLX Not Available
+
+MLX only works on macOS with Apple Silicon. For other platforms:
+
+```bash
+export ENLACE_VLM_FRAMEWORK=transformers
+uv run enlace extract paper.pdf --vlm
+```
+
+#### Claude API Key Error
+
+```bash
+# Set API key
+export ENLACE_CLAUDE_API_KEY=sk-ant-api03-...
+
+# Verify it works
+uv run enlace extract paper.pdf --vlm --claude-cleanup
+```
+
+### VLM Best Practices
+
+1. **Start with Granite only**: Test VLM without Claude cleanup first
+2. **Use MLX on macOS**: 10-20x faster than Transformers
+3. **Enable for scanned documents**: VLM excels at complex layouts
+4. **Monitor costs**: Claude cleanup adds $0.01-0.05 per table
+5. **Adjust thresholds**: Lower thresholds = more VLM usage, higher accuracy
+
+For detailed VLM architecture and implementation, see [VLM_INTEGRATION.md](VLM_INTEGRATION.md).
+
+---
 
 ## Configuration
 
@@ -413,10 +579,10 @@ Configuration is loaded in this order (later overrides earlier):
 
 ```bash
 # Extract with comprehensive settings
-enlace extract paper.pdf --augment --ocr auto --output results/
+uv run enlace extract paper.pdf --augment --ocr auto --output results/
 
 # Validate with comprehensive checks
-enlace validate results/paper/extraction.json \
+uv run enlace validate results/paper/extraction.json \
     --level comprehensive \
     --fail-on-issues
 ```
@@ -425,7 +591,7 @@ enlace validate results/paper/extraction.json \
 
 ```bash
 # Process directory with validation
-enlace batch papers/ \
+uv run enlace batch papers/ \
     --output batch_results/ \
     --workers 8 \
     --augment \
@@ -444,13 +610,13 @@ grep -l '"passed": false' batch_results/validation_reports/*.json
 
 ```bash
 # Initial extraction with Tesseract (fast)
-enlace extract paper.pdf --ocr tesseract -o results_tesseract/
+uv run enlace extract paper.pdf --ocr tesseract -o results_tesseract/
 
 # Validate and find low-confidence tables
-enlace validate results_tesseract/paper/extraction.json
+uv run enlace validate results_tesseract/paper/extraction.json
 
 # Re-extract with EasyOCR (more accurate)
-enlace extract paper.pdf --ocr easyocr -o results_easyocr/
+uv run enlace extract paper.pdf --ocr easyocr -o results_easyocr/
 
 # Compare results
 diff results_tesseract/paper/extraction.json \
@@ -477,8 +643,8 @@ fail_on_issues = true
 EOF
 
 # All extractions will use these settings
-enlace extract paper.pdf
-enlace batch papers/
+uv run enlace extract paper.pdf
+uv run enlace batch papers/
 ```
 
 ## Troubleshooting
@@ -493,13 +659,13 @@ enlace batch papers/
 2. Check docling installation includes OCR backends:
 
    ```bash
-   uv pip install docling[easyocr,tesseract]
+   uv add docling[easyocr,tesseract]
    ```
 
 3. For EasyOCR, ensure PyTorch is installed:
 
    ```bash
-   uv pip install torch torchvision
+   uv add torch torchvision
    ```
 
 ### Low Extraction Quality
@@ -511,19 +677,19 @@ enlace batch papers/
 1. Try different OCR backend:
 
    ```bash
-   enlace extract paper.pdf --ocr easyocr
+   uv run enlace extract paper.pdf --ocr easyocr
    ```
 
 2. Enable semantic augmentation for validation:
 
    ```bash
-   enlace extract paper.pdf --augment --ocr auto
+   uv run enlace extract paper.pdf --augment --ocr auto
    ```
 
 3. Check validation report for specific issues:
 
    ```bash
-   enlace validate output/paper/extraction.json --level comprehensive -v
+   uv run enlace validate output/paper/extraction.json --level comprehensive -v
    ```
 
 ### Semantic Augmentation Fails
@@ -547,7 +713,7 @@ enlace batch papers/
 3. Verify embedding model is installed:
 
    ```bash
-   uv pip install sentence-transformers
+   uv add sentence-transformers
    ```
 
 ### Batch Processing Hangs
@@ -559,27 +725,27 @@ enlace batch papers/
 1. Reduce number of workers:
 
    ```bash
-   enlace batch papers/ --workers 2
+   uv run enlace batch papers/ --workers 2
    ```
 
 2. Enable verbose logging to see progress:
 
    ```bash
-   enlace batch papers/ --verbose
+   uv run enlace batch papers/ --verbose
    ```
 
 3. Process papers individually to identify problematic files:
 
    ```bash
    for f in papers/*.pdf; do
-       enlace extract "$f" --output batch_output/
+       uv run enlace extract "$f" --output batch_output/
    done
    ```
 
 ## Getting Help
 
-- **CLI help:** `enlace --help`
-- **Command help:** `enlace extract --help`, `enlace validate --help`, etc.
+- **CLI help:** `uv run enlace --help`
+- **Command help:** `uv run enlace extract --help`, `uv run enlace validate --help`, etc.
 - **API documentation:** See [API_GUIDE.md](API_GUIDE.md)
 - **Configuration reference:** See [CONFIGURATION.md](CONFIGURATION.md)
 - **Development guide:** See [DEVELOPMENT.md](DEVELOPMENT.md)

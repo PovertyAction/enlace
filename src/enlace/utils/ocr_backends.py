@@ -76,11 +76,22 @@ class OCRBackendManager:
         """Create docling OCR options for primary backend.
 
         Returns:
-            Configured OCR options for docling
+            Configured OCR options for docling, or None if unavailable
 
         """
         if self.primary_backend == OCRBackend.TESSERACT:
-            return create_tesseract_options(self.config.ocr_languages)
+            options = create_tesseract_options(self.config.ocr_languages)
+            # If Tesseract fails and we have fallback enabled, try EasyOCR
+            if options is None and self.fallback_backend == OCRBackend.EASYOCR:
+                logger.warning(
+                    "Primary backend (Tesseract) unavailable, using EasyOCR instead"
+                )
+                return create_easyocr_options(
+                    self.config.ocr_languages,
+                    self.config.ocr_use_gpu,
+                    self.config.ocr_confidence_threshold,
+                )
+            return options
         elif self.primary_backend == OCRBackend.EASYOCR:
             return create_easyocr_options(
                 self.config.ocr_languages,
