@@ -55,8 +55,10 @@ class ValidationResult(BaseModel):
     extraction_path: Path
 
     # Status
-    passed: bool = Field(description="True if all checks passed")
-    score: float = Field(ge=0.0, le=1.0, description="Overall validation score")
+    passed: bool = Field(default=False, description="True if all checks passed")
+    score: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Overall validation score"
+    )
 
     # Issues
     issues: list[ValidationIssue] = Field(
@@ -89,6 +91,7 @@ class ValidationResult(BaseModel):
 
         Args:
             output_dir: Directory to save validation report
+                       (validation.json will be saved to output_dir/paper_id/)
 
         Raises:
             ValidationError: If save operation fails
@@ -96,10 +99,12 @@ class ValidationResult(BaseModel):
         """
         try:
             output_dir = Path(output_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
+            # Create paper-specific subdirectory (matching extraction structure)
+            paper_output_dir = output_dir / self.paper_id
+            paper_output_dir.mkdir(parents=True, exist_ok=True)
 
             # Save validation report
-            report_path = output_dir / f"{self.paper_id}_validation.json"
+            report_path = paper_output_dir / "validation.json"
             with open(report_path, "w") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2, default=str)
 

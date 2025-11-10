@@ -141,13 +141,13 @@ def _check_regression_table(table: RegressionTable, table_id: str) -> dict:
 
         for coef in model.coefficients:
             # Count expected fields
-            total_fields += 4  # coefficient, std_err, t_stat, p_value
+            total_fields += 4  # coefficient, std_error, t_statistic, p_value
 
             if coef.coefficient is None:
                 missing_fields += 1
-            if coef.std_err is None:
+            if coef.std_error is None:
                 missing_fields += 1
-            if coef.t_stat is None:
+            if coef.t_statistic is None:
                 missing_fields += 1
             if coef.p_value is None:
                 missing_fields += 1

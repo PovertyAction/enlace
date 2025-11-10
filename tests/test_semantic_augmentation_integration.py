@@ -10,9 +10,9 @@ from langchain_core.documents import Document
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from augmentation_config import AugmentationConfig
-from semantic_search import SemanticSearchPipeline
-from semantic_validator import SemanticValidator
+from enlace.augmentation_config import AugmentationConfig
+from enlace.semantic_search import SemanticSearchPipeline
+from enlace.semantic_validator import SemanticValidator
 
 
 @pytest.mark.integration

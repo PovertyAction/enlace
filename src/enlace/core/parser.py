@@ -177,6 +177,15 @@ class TableParser:
             # Extract caption
             caption = self._extract_picture_caption(picture)
 
+            # Extract vision model annotation if available
+            annotation = None
+            if hasattr(picture, "captions") and picture.captions:
+                # Vision model descriptions are stored in captions
+                for cap in picture.captions:
+                    if hasattr(cap, "text") and cap.text:
+                        annotation = cap.text.strip()
+                        break
+
             # Extract page number
             page_no = None
             if (
@@ -232,6 +241,7 @@ class TableParser:
                 image_width=image_width,
                 image_height=image_height,
                 quality_score=quality_score,
+                annotation=annotation,
             )
 
             figures.append(figure)

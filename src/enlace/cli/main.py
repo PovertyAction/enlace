@@ -51,6 +51,17 @@ def extract(
     augment: bool = typer.Option(
         False, "--augment", help="Enable semantic augmentation"
     ),
+    vlm: bool = typer.Option(
+        False, "--vlm", help="Enable VLM fallback for low-quality tables"
+    ),
+    vlm_framework: str = typer.Option(
+        "auto",
+        "--vlm-framework",
+        help="VLM inference framework (auto, transformers, mlx)",
+    ),
+    claude_cleanup: bool = typer.Option(
+        False, "--claude-cleanup", help="Enable Claude cleanup pass (requires API key)"
+    ),
     ocr_backend: str = typer.Option(
         "none",
         "--ocr",
@@ -118,6 +129,9 @@ def extract(
         config = ExtractionConfig.load_config(
             config_file=config_file,
             enable_augmentation=augment,
+            enable_vlm=vlm,
+            vlm_framework=vlm_framework,
+            enable_claude_cleanup=claude_cleanup,
             enable_ocr=ocr_backend != "none",
             ocr_backend=ocr_backend if ocr_backend != "none" else "auto",
             hybrid_ocr_enabled=not no_hybrid_ocr,
@@ -209,8 +223,19 @@ def extract(
                 task, description=f"[cyan]Extracting from {input_path.name}"
             )
             logger.info(f"Extracting from {input_path.name}")
+
+            # Build CLI command for reproducibility
+            import sys
+
+            cli_command = " ".join(sys.argv)
+
+            # Get config as dict for reproducibility (safely excludes API keys)
+            config_dict = config.to_safe_dict()
+
             extractor = PaperExtractor(config)
-            result = extractor.extract(input_path)
+            result = extractor.extract(
+                input_path, cli_command=cli_command, config_dict=config_dict
+            )
             progress.advance(task)
 
             # Step 2: Augment if requested
@@ -301,6 +326,20 @@ def validate(
     try:
         setup_logging(level=log_level, verbose=verbose)
 
+        # Infer output directory from extraction path if using default
+        if output_dir == Path("validation_reports"):
+            # If extraction_path is like "output/paper_id/extraction.json"
+            # use "output" as the output_dir
+            if extraction_path.name == "extraction.json":
+                output_dir = extraction_path.parent.parent
+            else:
+                # If extraction_path is a directory, use its parent
+                output_dir = (
+                    extraction_path.parent
+                    if extraction_path.is_file()
+                    else extraction_path
+                )
+
         config = ValidationConfig.load_config(
             config_file=config_file,
             level=level,
@@ -343,7 +382,7 @@ def validate(
             for rec in result.recommendations:
                 typer.echo(f"  - {rec}")
 
-        typer.echo(f"\nReport: {output_dir / f'{result.paper_id}_validation.json'}")
+        typer.echo(f"\nReport: {output_dir / result.paper_id / 'validation.json'}")
 
         if fail_on_issues and not result.passed:
             raise typer.Exit(code=1)

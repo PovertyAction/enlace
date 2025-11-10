@@ -13,8 +13,8 @@ import pytest
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from augmentation_config import AugmentationConfig
-from context_models import StudyContext
+from enlace.augmentation_config import AugmentationConfig
+from enlace.context_models import StudyContext
 
 
 @pytest.mark.unit

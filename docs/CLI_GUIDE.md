@@ -146,17 +146,23 @@ The command creates a directory structure:
 ```text
 output/
 └── paper_id/
-    ├── extraction.json          # Main extraction result
+    ├── extraction.json          # Main extraction result with figure annotations
     ├── extraction.csv           # CSV format (if --format csv or both)
+    ├── paper_id.md              # Markdown with vision model annotations
     ├── tables/                  # Individual table files
     │   ├── table_1.json
     │   ├── table_2.json
     │   └── ...
-    └── figures/                 # Extracted figures
+    └── figures/                 # Extracted figures (referenced in markdown)
         ├── figure_1.png
         ├── figure_2.png
         └── ...
 ```
+
+**Note:** Figure annotations can optionally be generated using Granite Vision (local AI model) by setting `ENLACE_DESCRIBE_PICTURES=true`. When enabled, annotations are saved in both:
+
+- **Markdown**: Below each image reference as `VISION MODEL ANNOTATION: [description]`
+- **JSON**: In `extraction.json` under each figure's `annotation` field
 
 **Exit Codes:**
 
@@ -507,6 +513,90 @@ For detailed VLM architecture and implementation, see [VLM_INTEGRATION.md](VLM_I
 
 ---
 
+## Vision Model Annotations for Figures
+
+### Overview
+
+enlace can generate AI-powered descriptions for all extracted figures using **Granite Vision**, IBM's 258M parameter vision language model. This feature:
+
+- **Runs locally** - No external API calls, privacy-preserving
+- **Dual output** - Saves annotations in both markdown and JSON
+- **Opt-in** - Disabled by default due to processing time; enable when needed
+- **Searchable** - Makes figure content discoverable through text search
+- **Accessible** - Provides alt-text-like descriptions
+
+### Output Format
+
+**Markdown Output:**
+
+```markdown
+![Image](figures/figure_1.png)
+VISION MODEL ANNOTATION: The image shows a bar chart comparing treatment effects across three outcome variables. The treatment group (blue bars) shows higher values than the control group (red bars) for all three variables, with the largest difference observed in variable A.
+```
+
+**JSON Output:**
+
+```json
+{
+  "figures": [
+    {
+      "figure_id": "figure_1",
+      "figure_number": "1",
+      "caption": "Figure 1: Treatment Effects by Outcome",
+      "annotation": "The image shows a bar chart comparing treatment effects across three outcome variables...",
+      "image_path": "figures/figure_1.png",
+      "page_number": 15
+    }
+  ]
+}
+```
+
+### Configuration
+
+Vision model annotations are **disabled by default** (processing can be slow). To enable:
+
+**Via Environment Variable:**
+
+```bash
+export ENLACE_DESCRIBE_PICTURES=true
+enlace extract paper.pdf
+```
+
+**Via Configuration File:**
+
+```toml
+[tool.enlace]
+describe_pictures = true
+```
+
+### Use Cases
+
+1. **Meta-Analysis** - Search across figure descriptions to find specific chart types
+2. **Accessibility** - Provide text descriptions for screen readers
+3. **Data Harmonization** - Understand figure content without viewing images
+4. **Documentation** - Auto-generate figure summaries for reports
+
+### Performance
+
+- **Processing Time**: 6-10 seconds per figure (MLX on macOS) or 80-120 seconds (Transformers)
+- **Cost**: $0 (runs completely locally)
+- **Accuracy**: High-quality descriptions suitable for research documentation
+
+### Troubleshooting
+
+**Vision Model Takes Too Long:**
+
+The first run downloads the model (~500MB). Subsequent runs are faster. On macOS with Apple Silicon, enable MLX for 10-20x speedup (automatically detected).
+
+**Disable for Faster Processing:**
+
+```bash
+export ENLACE_DESCRIBE_PICTURES=false
+enlace batch papers/ --workers 8
+```
+
+---
+
 ## Configuration
 
 ### Configuration Files
@@ -525,6 +615,8 @@ enable_ocr = true
 ocr_backend = "auto"
 ocr_confidence_threshold = 0.85
 enable_augmentation = true
+extract_figures = true
+describe_pictures = false  # Enable to include vision model annotations for figures
 output_format = "both"
 output_dir = "extracted_data"
 max_workers = 8
@@ -549,6 +641,8 @@ All configuration options can be set via environment variables with `ENLACE_` pr
 export ENLACE_ENABLE_OCR=true
 export ENLACE_OCR_BACKEND=auto
 export ENLACE_ENABLE_AUGMENTATION=true
+export ENLACE_EXTRACT_FIGURES=true
+export ENLACE_DESCRIBE_PICTURES=false  # Enable to include vision model annotations
 export ENLACE_OUTPUT_FORMAT=json
 export ENLACE_LLM_MODEL=claude-4-5-haiku
 export ENLACE_VALIDATION_LEVEL=comprehensive

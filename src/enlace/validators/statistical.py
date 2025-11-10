@@ -48,17 +48,17 @@ def validate_statistical_consistency(extraction: ExtractionResult) -> CheckResul
         )
 
     # Validate each regression table
-    for table in regression_tables:
-        table_id = table.table_id
+    for table_idx, table in enumerate(regression_tables):
+        table_id = table.table_number or f"Table {table_idx}"
 
         for model_idx, model in enumerate(table.models):
             for coef in model.coefficients:
                 var_name = coef.variable_name
 
                 # Check 1: Standard errors are positive
-                if coef.std_err is not None:
+                if coef.std_error is not None:
                     checks_performed += 1
-                    if coef.std_err < 0:
+                    if coef.std_error < 0:
                         issues.append(
                             f"{table_id}, model {model_idx + 1}, {var_name}: "
                             "Negative standard error"
@@ -69,13 +69,13 @@ def validate_statistical_consistency(extraction: ExtractionResult) -> CheckResul
                 # Check 2: T-stat calculation
                 if (
                     coef.coefficient is not None
-                    and coef.std_err is not None
-                    and coef.t_stat is not None
-                    and coef.std_err != 0
+                    and coef.std_error is not None
+                    and coef.t_statistic is not None
+                    and coef.std_error != 0
                 ):
                     checks_performed += 1
-                    expected_t = coef.coefficient / coef.std_err
-                    actual_t = coef.t_stat
+                    expected_t = coef.coefficient / coef.std_error
+                    actual_t = coef.t_statistic
 
                     # Allow 10% tolerance for rounding
                     if abs(expected_t - actual_t) / (abs(actual_t) + 1e-10) > 0.1:
@@ -88,10 +88,10 @@ def validate_statistical_consistency(extraction: ExtractionResult) -> CheckResul
                         checks_passed += 1
 
                 # Check 3: P-value consistency with t-stat
-                if coef.t_stat is not None and coef.p_value is not None:
+                if coef.t_statistic is not None and coef.p_value is not None:
                     checks_performed += 1
                     # Simple heuristic: |t| > 1.96 should give p < 0.05
-                    abs_t = abs(coef.t_stat)
+                    abs_t = abs(coef.t_statistic)
                     p_val = coef.p_value
 
                     # Check consistency (allowing some tolerance)
@@ -108,18 +108,16 @@ def validate_statistical_consistency(extraction: ExtractionResult) -> CheckResul
                 # Check 4: Confidence interval consistency
                 if (
                     coef.coefficient is not None
-                    and coef.conf_int_lower is not None
-                    and coef.conf_int_upper is not None
+                    and coef.ci_lower is not None
+                    and coef.ci_upper is not None
                 ):
                     checks_performed += 1
                     # Coefficient should be between CI bounds
-                    if not (
-                        coef.conf_int_lower <= coef.coefficient <= coef.conf_int_upper
-                    ):
+                    if not (coef.ci_lower <= coef.coefficient <= coef.ci_upper):
                         warnings.append(
                             f"{table_id}, model {model_idx + 1}, {var_name}: "
                             f"Coefficient {coef.coefficient:.3f} outside CI "
-                            f"[{coef.conf_int_lower:.3f}, {coef.conf_int_upper:.3f}]"
+                            f"[{coef.ci_lower:.3f}, {coef.ci_upper:.3f}]"
                         )
                     else:
                         checks_passed += 1

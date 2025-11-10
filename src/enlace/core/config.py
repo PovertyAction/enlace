@@ -32,6 +32,9 @@ class ExtractionConfig(BaseSettings):
         extra="ignore",
     )
 
+    # Sensitive fields that should never be saved to extraction files
+    _SENSITIVE_FIELDS = {"claude_api_key"}
+
     # Document processing
     enable_ocr: bool = Field(
         default=False, description="Enable OCR for scanned documents"
@@ -58,6 +61,10 @@ class ExtractionConfig(BaseSettings):
     )
     extract_figures: bool = Field(
         default=True, description="Extract figures from papers"
+    )
+    describe_pictures: bool = Field(
+        default=False,
+        description="Enable vision model annotations for extracted images",
     )
     extract_tables: bool = Field(default=True, description="Extract tables from papers")
     extract_metadata: bool = Field(
@@ -258,12 +265,27 @@ class ExtractionConfig(BaseSettings):
             if not field.startswith("_")
         }
 
+    def to_safe_dict(self) -> dict[str, Any]:
+        """Export configuration as dict, excluding sensitive fields.
+
+        This method should be used when saving config to extraction files
+        to prevent leaking API keys or other secrets.
+
+        Returns:
+            Dictionary with config values, excluding sensitive fields
+
+        """
+        return self.model_dump(exclude_none=True, exclude=self._SENSITIVE_FIELDS)
+
 
 class ValidationConfig(BaseSettings):
     """Configuration for validation."""
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_prefix="ENLACE_VALIDATION_", case_sensitive=False
+        env_file=".env",
+        env_prefix="ENLACE_VALIDATION_",
+        case_sensitive=False,
+        extra="ignore",
     )
 
     level: str = Field(default="standard", description="Validation level name")

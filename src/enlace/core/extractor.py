@@ -74,11 +74,18 @@ class PaperExtractor:
             f"figures={config.extract_figures}"
         )
 
-    def extract(self, paper_path: Path) -> ExtractionResult:
+    def extract(
+        self,
+        paper_path: Path,
+        cli_command: str | None = None,
+        config_dict: dict | None = None,
+    ) -> ExtractionResult:
         """Extract tables, figures, metadata from paper.
 
         Args:
             paper_path: Path to PDF or DOCX file
+            cli_command: CLI command used for extraction (for reproducibility)
+            config_dict: Configuration dict used (for reproducibility)
 
         Returns:
             ExtractionResult with extracted content
@@ -105,11 +112,27 @@ class PaperExtractor:
             paper_output_dir = self.config.output_dir / paper_id
             paper_output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Initialize result
+            # Get enlace version
+            try:
+                from importlib.metadata import version
+
+                enlace_version = version("enlace")
+            except Exception:
+                enlace_version = "unknown"
+
+            # Initialize result with extraction metadata
+            from enlace.models.extraction import ExtractionMetadata
+
             result = ExtractionResult(
                 paper_id=paper_id,
                 source_file=paper_path,
                 extraction_date=datetime.now(),
+                extraction_metadata=ExtractionMetadata(
+                    enlace_version=enlace_version,
+                    extraction_date=datetime.now(),
+                    command=cli_command,
+                    config=config_dict or {},
+                ),
             )
 
             # Step 1: Convert PDF to markdown
@@ -128,6 +151,7 @@ class PaperExtractor:
                 paper_output_dir,
                 ocr_options=ocr_options,
                 extract_figures=self.config.extract_figures,
+                describe_pictures=self.config.describe_pictures,
             )
 
             # Step 2: Extract metadata
@@ -182,9 +206,9 @@ class PaperExtractor:
             result.extraction_quality = self._calculate_quality_score(result)
 
             # Calculate processing time
-            result.processing_time_seconds = (
-                datetime.now() - start_time
-            ).total_seconds()
+            processing_time = (datetime.now() - start_time).total_seconds()
+            result.processing_time_seconds = processing_time
+            result.extraction_metadata.processing_time_seconds = processing_time
 
             logger.info(
                 f"Extraction complete: {result.tables_extracted} tables, "

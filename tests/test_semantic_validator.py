@@ -9,9 +9,9 @@ import pytest
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from augmentation_config import AugmentationConfig
-from context_models import ValidationResult
-from semantic_validator import SemanticValidator
+from enlace.augmentation_config import AugmentationConfig
+from enlace.context_models import ValidationResult
+from enlace.semantic_validator import SemanticValidator
 
 
 @pytest.mark.unit

@@ -12,7 +12,8 @@ enlace is a Python package for extracting structured data from development econo
 ### Key Features
 
 - **Automated Table Extraction** - Regression tables, summary statistics, balance tables
-- **Figure Extraction** - Extract and save figures from papers
+- **Figure Extraction** - Extract and save figures with vision model annotations
+- **Vision Model Annotations** - Local AI-powered image descriptions using Granite Vision
 - **Metadata Extraction** - Title, authors, year, DOI, citations, methodology
 - **OCR Support** - Hybrid OCR with Tesseract + EasyOCR fallback for scanned documents
 - **Semantic Augmentation** - RAG-based context extraction using LLMs
@@ -126,6 +127,48 @@ Automatically detects and extracts three types of tables:
 2. **Summary Statistics** - Mean, SD, min, max, N for multiple variables
 3. **Balance Tables** - Treatment vs. control group comparisons
 
+### Figure Extraction with Vision Model Annotations
+
+Automatically extract figures and generate AI-powered descriptions:
+
+- **Local Vision Model** - Uses Granite Vision (IBM's 258M parameter model) by default
+- **Privacy-Preserving** - All processing happens locally, no external API calls
+- **Dual Output** - Annotations saved in both markdown and JSON
+- **Searchable** - Text descriptions make figures discoverable
+- **Accessible** - Provides alt-text-like descriptions for all images
+
+**Output Examples:**
+
+*Markdown:*
+
+```markdown
+![Image](figures/figure_1.png)
+VISION MODEL ANNOTATION: The image shows a bar chart comparing treatment and control groups across three outcome variables...
+```
+
+*JSON:*
+
+```json
+{
+  "figure_id": "figure_1",
+  "caption": "Figure 1: Treatment Effects",
+  "annotation": "The image shows a bar chart comparing treatment and control groups...",
+  "image_path": "figures/figure_1.png"
+}
+```
+
+**Configuration:**
+
+```bash
+# Figure annotation is disabled by default
+# The following will not generate annotations
+enlace extract paper.pdf
+
+# Enable via environment variable
+export ENLACE_DESCRIBE_PICTURES=true
+enlace extract paper.pdf
+```
+
 ### OCR Support
 
 Hybrid OCR system for scanned documents:
@@ -234,6 +277,8 @@ enable_ocr = true
 ocr_backend = "auto"
 ocr_confidence_threshold = 0.85
 enable_augmentation = true
+extract_figures = true
+# describe_pictures = true  # Optional: Enable vision model annotations (slow)
 output_format = "both"
 max_workers = 8
 
@@ -254,6 +299,8 @@ All options can be set via environment variables with `ENLACE_` prefix:
 export ENLACE_ENABLE_OCR=true
 export ENLACE_OCR_BACKEND=auto
 export ENLACE_ENABLE_AUGMENTATION=true
+export ENLACE_EXTRACT_FIGURES=true
+export ENLACE_DESCRIBE_PICTURES=true  # Enable vision model annotations
 export ENLACE_OUTPUT_FORMAT=both
 export ENLACE_MAX_WORKERS=8
 export ANTHROPIC_API_KEY=your_api_key  # Required for augmentation

@@ -21,12 +21,69 @@ if "TESSDATA_PREFIX" not in os.environ and (tessdata_path := _detect_tessdata_pa
     logger.debug(f"Set TESSDATA_PREFIX={tessdata_path}")
 
 from docling.datamodel.base_models import InputFormat  # noqa: E402
-from docling.datamodel.pipeline_options import PdfPipelineOptions  # noqa: E402
+from docling.datamodel.pipeline_options import (  # noqa: E402
+    PdfPipelineOptions,
+    granite_picture_description,
+)
 from docling.document_converter import (  # noqa: E402
     ConversionResult,
     DocumentConverter,
     PdfFormatOption,
 )
+from docling_core.types.doc.base import ImageRefMode  # noqa: E402
+
+
+def _add_picture_annotations(markdown_path: Path, result: ConversionResult) -> None:
+    """Add vision model annotations to pictures in markdown.
+
+    Args:
+        markdown_path: Path to the markdown file
+        result: Docling conversion result with picture descriptions
+
+    """
+    # Read the markdown file
+    with markdown_path.open("r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Build a mapping of image filenames to their descriptions
+    image_descriptions = {}
+    for pic in result.document.pictures:
+        if pic.captions:
+            # Get the first caption text
+            description = pic.captions[0].text if pic.captions else None
+            if description and pic.image and pic.image.uri:
+                # Extract filename from URI
+                uri_str = str(pic.image.uri)
+                if "image_" in uri_str:
+                    # Extract the image filename
+                    filename = uri_str.split("/")[-1] if "/" in uri_str else uri_str
+                    image_descriptions[filename] = description
+
+    # Replace image references with annotated versions
+    import re
+
+    lines = content.split("\n")
+    new_lines = []
+
+    for line in lines:
+        new_lines.append(line)
+        # Check if this line contains an image reference
+        match = re.match(r"!\[.*?\]\((.*?)\)", line)
+        if match:
+            image_path = match.group(1)
+            # Extract filename from path
+            filename = image_path.split("/")[-1]
+            if filename in image_descriptions:
+                # Add annotation on the next line
+                annotation = image_descriptions[filename]
+                new_lines.append(f"VISION MODEL ANNOTATION: {annotation}")
+                new_lines.append("")  # Add blank line for readability
+
+    # Write back the modified content
+    with markdown_path.open("w", encoding="utf-8") as f:
+        f.write("\n".join(new_lines))
+
+    logger.info(f"Added {len(image_descriptions)} vision model annotations")
 
 
 def convert_pdf_to_markdown(
@@ -34,6 +91,7 @@ def convert_pdf_to_markdown(
     output_dir: Path,
     ocr_options=None,
     extract_figures: bool = True,
+    describe_pictures: bool = False,
 ) -> tuple[Path, ConversionResult]:
     """Convert PDF to markdown using docling.
 
@@ -43,6 +101,7 @@ def convert_pdf_to_markdown(
         ocr_options: Pre-configured OCR options (TesseractOcrOptions or EasyOcrOptions),
                     or None to disable OCR
         extract_figures: Enable figure/image extraction
+        describe_pictures: Enable vision model annotations for images (default: False)
 
     Returns:
         Tuple of (markdown_path, conversion_result)
@@ -86,6 +145,12 @@ def convert_pdf_to_markdown(
         pipeline_options.generate_picture_images = extract_figures
         pipeline_options.images_scale = 2.0  # 144 DPI resolution
 
+        # Configure picture description with local vision model
+        if describe_pictures and extract_figures:
+            pipeline_options.do_picture_description = True
+            pipeline_options.picture_description_options = granite_picture_description
+            logger.info("Picture description enabled with Granite Vision model")
+
         converter = DocumentConverter(
             format_options={
                 InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
@@ -96,12 +161,18 @@ def convert_pdf_to_markdown(
         logger.info(f"Converting document: {pdf_path.name}")
         result = converter.convert(str(pdf_path))
 
-        # Export to markdown
-        markdown_text = result.document.export_to_markdown()
+        # Save markdown with externally referenced images
+        # Images will be saved to figures/ subdirectory with relative paths
+        # artifacts_dir should be relative to the markdown file location
+        result.document.save_as_markdown(
+            markdown_path,
+            artifacts_dir=Path("figures"),
+            image_mode=ImageRefMode.REFERENCED,
+        )
 
-        # Save markdown
-        with markdown_path.open("w", encoding="utf-8") as f:
-            f.write(markdown_text)
+        # Post-process to add vision model annotations
+        if describe_pictures and extract_figures:
+            _add_picture_annotations(markdown_path, result)
 
         logger.info(f"Conversion complete: {markdown_path}")
         return markdown_path, result

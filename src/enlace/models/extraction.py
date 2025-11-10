@@ -3,6 +3,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -13,6 +14,24 @@ from enlace.models.tables import (
     RegressionTable,
     SummaryStatisticsTable,
 )
+
+
+class ExtractionMetadata(BaseModel):
+    """Metadata about the extraction process for reproducibility."""
+
+    enlace_version: str | None = Field(
+        None, description="Version of enlace used for extraction"
+    )
+    extraction_date: datetime = Field(
+        default_factory=datetime.now, description="When extraction was performed"
+    )
+    command: str | None = Field(None, description="CLI command used")
+    config: dict[str, Any] = Field(
+        default_factory=dict, description="Configuration settings used"
+    )
+    processing_time_seconds: float | None = Field(
+        None, description="Total processing time"
+    )
 
 
 class PaperMetadata(BaseModel):
@@ -41,6 +60,12 @@ class ExtractionResult(BaseModel):
     metadata: PaperMetadata = Field(
         default_factory=PaperMetadata,
         description="Paper metadata (title, authors, etc)",
+    )
+
+    # Extraction metadata (for reproducibility)
+    extraction_metadata: ExtractionMetadata = Field(
+        default_factory=ExtractionMetadata,
+        description="Metadata about extraction process",
     )
 
     # Quality metrics

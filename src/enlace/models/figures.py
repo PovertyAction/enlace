@@ -42,3 +42,6 @@ class Figure(BaseModel):
     figure_context: dict[str, Any] | None = Field(
         None, description="Semantic context describing the figure content"
     )
+    annotation: str | None = Field(
+        None, description="Vision model annotation describing the image content"
+    )
