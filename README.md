@@ -1,21 +1,21 @@
 # enlace
 
-**Extract and validate research paper data for meta-analysis and data harmonization**
+**Extract, validate, and summarize research papers to prepare for data harmonization and meta-analysis**
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 
-enlace is a Python package for extracting structured data from development economics research papers. It automatically extracts tables (regression results, summary statistics, balance tables), figures, and metadata from PDF/DOCX papers, with optional semantic augmentation for enhanced context and error detection.
+enlace is a Python package for extracting structured data from social science research papers. It automatically extracts tables (regression results, summary statistics, balance tables), figures, and metadata from PDF/DOCX papers, with optional semantic augmentation for enhanced context and error detection.
 
 ### Key Features
 
 - **Automated Table Extraction** - Regression tables, summary statistics, balance tables
 - **Figure Extraction** - Extract and save figures with vision model annotations
-- **Vision Model Annotations** - Local AI-powered image descriptions using Granite Vision
-- **Metadata Extraction** - Title, authors, year, DOI, citations, methodology
-- **OCR Support** - Hybrid OCR with Tesseract + EasyOCR fallback for scanned documents
+- **Vision Model Annotations** - Local AI-powered image descriptions
+- **Metadata Extraction** - Title, authors, institution, journal, year, DOI, citations, methodology
+- **OCR Support** - Hybrid OCR with Tesseract + EasyOCR fallback
 - **Semantic Augmentation** - RAG-based context extraction using LLMs
 - **Data Validation** - Comprehensive quality checks with configurable validation levels
 - **Batch Processing** - Parallel processing of multiple papers
@@ -52,6 +52,8 @@ enlace --help
 
 ### Extract from a Single Paper
 
+Given a path to a file, `paper.pdf`, enlace converts the file to markdown using docling, generates an `extraction.json` with identified tables and metadata, and stores images from the paper. Optionally, you can output tables to csv and use vision models to annotate images.
+
 ```bash
 # Basic extraction
 enlace extract paper.pdf
@@ -69,6 +71,8 @@ enlace extract paper.pdf --format both -o results/
 
 ### Validate Extraction Quality
 
+following the extract step, it's often helpful to validate that the table contents are sensible.
+
 ```bash
 # Standard validation
 enlace validate output/paper/extraction.json
@@ -76,11 +80,13 @@ enlace validate output/paper/extraction.json
 # Comprehensive validation with all checks
 enlace validate output/paper/extraction.json --level comprehensive
 
-# Fail on validation issues (useful for CI/CD)
+# Fail on validation issues
 enlace validate output/paper/extraction.json --fail-on-issues
 ```
 
 ### Generate Research Summaries
+
+Using the outputs of the extract step, you can create AI-generated summaries of research papers.
 
 ```bash
 # Basic summary (requires ANTHROPIC_API_KEY)
@@ -149,7 +155,6 @@ Automatically detects and extracts three types of tables:
 Automatically extract figures and generate AI-powered descriptions:
 
 - **Local Vision Model** - Uses Granite Vision (IBM's 258M parameter model) by default
-- **Privacy-Preserving** - All processing happens locally, no external API calls
 - **Dual Output** - Annotations saved in both markdown and JSON
 - **Searchable** - Text descriptions make figures discoverable
 - **Accessible** - Provides alt-text-like descriptions for all images
@@ -217,7 +222,7 @@ Enhance extractions with context from paper text using RAG:
 - **Cross-Validation** - Detects OCR errors by comparing to paper text
 - **Confidence Scores** - Quality metrics for extracted information
 
-**Requirement:** Semantic augmentation requires `ANTHROPIC_API_KEY` environment variable.
+**Requirement:** Semantic augmentation requires `ANTHROPIC_API_KEY` environment variable. (Other remote models as well as local models are on the roadmap).
 
 ```bash
 # Set API key
@@ -253,9 +258,9 @@ Generate structured, LLM-based summaries of research papers from extraction resu
 
 - **Structured Output** - JSON and Markdown formats with standardized sections
 - **Multi-Source Integration** - Combines extraction data, validation results, and optional PDF analysis
-- **Anti-Hallucination** - Strict prompting prevents fabrication of data
+- **Anti-Hallucination** - Strict prompting minimizes fabrication of data
 - **Customizable Detail Levels** - Brief, standard, or detailed summaries
-- **Web Search Enhancement** - Optional web search for additional context
+- **Web Search Enhancement** - Optional web search for additional context (not yet implemented)
 - **Quality Assessment** - Includes extraction quality scores and validation issues
 
 **Summary Sections:**
@@ -322,7 +327,7 @@ from enlace.core.config import SummaryConfig
 
 # Custom configuration
 config = SummaryConfig(
-    llm_model="claude-3-5-sonnet-20241022",  # Use more powerful model
+    llm_model="claude-4-5-sonnet-20250929",  # Use more powerful model
     temperature=0.3,  # Lower = more conservative
     max_tokens=4096,  # Longer summaries
     detail_level="detailed",  # brief, standard, or detailed
@@ -352,7 +357,7 @@ To modify the summary structure or focus, edit the prompts in `src/enlace/core/s
 
 ```bash
 # Set default model
-export ENLACE_SUMMARY_MODEL=claude-3-5-sonnet-20241022
+export ENLACE_SUMMARY_MODEL=claude-4-5-sonnet
 
 # Set temperature (0.0-1.0, lower = more conservative)
 export ENLACE_SUMMARY_TEMPERATURE=0.2
@@ -424,7 +429,7 @@ level = "comprehensive"
 fail_on_issues = true
 
 [tool.enlace.summary]
-llm_model = "claude-3-5-haiku-20241022"
+llm_model = "claude-4-5-sonnet"
 temperature = 0.3
 max_tokens = 4096
 detail_level = "standard"
@@ -447,7 +452,7 @@ export ENLACE_OUTPUT_FORMAT=both
 export ENLACE_MAX_WORKERS=8
 
 # Summary settings
-export ENLACE_SUMMARY_MODEL=claude-3-5-sonnet-20241022
+export ENLACE_SUMMARY_MODEL=claude-4-5-sonnet
 export ENLACE_SUMMARY_TEMPERATURE=0.3
 export ENLACE_SUMMARY_DETAIL_LEVEL=detailed
 export ENLACE_SUMMARY_WEB_SEARCH=true
