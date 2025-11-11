@@ -80,3 +80,21 @@ class ValidationError(EnlaceError):
     """Validation operation failed."""
 
     pass
+
+
+class SummaryError(EnlaceError):
+    """Summary generation failed."""
+
+    pass
+
+
+class LLMError(SummaryError):
+    """LLM API call failed."""
+
+    pass
+
+
+class WebSearchError(SummaryError):
+    """Web search enhancement failed."""
+
+    pass

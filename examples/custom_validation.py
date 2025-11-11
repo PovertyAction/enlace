@@ -25,7 +25,7 @@ def main():
     # Create custom validation configuration
     validation_config = ValidationConfig(
         level="custom",
-        output_dir=Path("validation_reports"),
+        output_dir=Path("output"),  # Saves to output/{paper_id}/validation.json
         fail_on_issues=False,
         levels={
             # Quick screening checks
@@ -96,7 +96,9 @@ def validate_batch():
     # Custom validation config
     config = ValidationConfig(
         level="comprehensive",
-        output_dir=Path("validation_reports"),
+        output_dir=Path(
+            "batch_output"
+        ),  # Saves to batch_output/{paper_id}/validation.json
         fail_on_issues=False,
     )
 

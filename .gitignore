@@ -164,8 +164,7 @@ cython_debug/
 .ruff_cache/
 _archive/
 papers/
-validation_reports/
-
+output/
 # Data files
 data/**/*.dta
 data/**/*.spss

@@ -136,7 +136,7 @@ class BatchProcessor:
             self.validation_config = ValidationConfig.load_config(
                 config_file=config_file,
                 level=validation_level,
-                output_dir=output_dir / "validation_reports",
+                output_dir=output_dir,  # Same dir as extraction - saves to paper_id subdirs
                 verbose=verbose,
             )
         else:

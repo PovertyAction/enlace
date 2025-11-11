@@ -188,7 +188,7 @@ uv run enlace validate [OPTIONS] EXTRACTION_PATH
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
 | `--level` | `-l` | `standard` | Validation level (quick, standard, comprehensive) |
-| `--output` | `-o` | `validation_reports` | Output directory for reports |
+| `--output` | `-o` | Auto-detected | Output directory (defaults to extraction parent directory) |
 | `--config` | `-c` | `None` | Path to configuration file |
 | `--fail-on-issues` | | `False` | Exit with error if issues found |
 | `--verbose` | `-v` | `False` | Enable verbose output |
@@ -236,8 +236,10 @@ uv run enlace validate output/paper/extraction.json --config .enlace.toml
 **Output:**
 
 ```text
-validation_reports/
-└── paper_id_validation.json    # Validation report with issues and recommendations
+output/
+└── paper_id/
+    ├── extraction.json         # Original extraction
+    └── validation.json         # Validation report with issues and recommendations
 ```
 
 **Console Output Example:**
@@ -320,17 +322,15 @@ batch_output/
 ├── paper_1/
 │   ├── extraction.json
 │   ├── tables/
-│   └── figures/
+│   ├── figures/
+│   └── validation.json         # If --validate enabled
 ├── paper_2/
 │   ├── extraction.json
 │   ├── tables/
-│   └── figures/
+│   ├── figures/
+│   └── validation.json         # If --validate enabled
 ├── ...
-├── batch_summary.json          # Batch statistics
-└── validation_reports/         # If --validate enabled
-    ├── paper_1_validation.json
-    ├── paper_2_validation.json
-    └── ...
+└── batch_summary.json          # Batch statistics
 ```
 
 **Batch Summary Example:**
@@ -627,7 +627,7 @@ embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
 
 [tool.enlace.validation]
 level = "comprehensive"
-output_dir = "validation_reports"
+# output_dir auto-detects from extraction path by default
 fail_on_issues = true
 ```
 
@@ -697,7 +697,7 @@ uv run enlace batch papers/ \
 cat batch_results/batch_summary.json
 
 # Check validation reports for issues
-grep -l '"passed": false' batch_results/validation_reports/*.json
+grep -l '"passed": false' batch_results/*/validation.json
 ```
 
 ### Re-extract with Different OCR Backend

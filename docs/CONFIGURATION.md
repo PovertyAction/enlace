@@ -62,7 +62,7 @@ log_file = "enlace.log"
 # Validation configuration
 [tool.enlace.validation]
 level = "comprehensive"
-output_dir = "validation_reports"
+# output_dir auto-detects from extraction path by default
 fail_on_issues = true
 
 # Custom validation levels
@@ -165,7 +165,7 @@ Validation environment variables use `ENLACE_VALIDATION_` prefix:
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `ENLACE_VALIDATION_LEVEL` | str | `"standard"` | Validation level name |
-| `ENLACE_VALIDATION_OUTPUT_DIR` | str | `"validation_reports"` | Validation output directory |
+| `ENLACE_VALIDATION_OUTPUT_DIR` | str | Auto-detected | Validation output directory (inferred from extraction path) |
 | `ENLACE_VALIDATION_FAIL_ON_ISSUES` | bool | `false` | Exit with error if issues found |
 | `ENLACE_VALIDATION_VERBOSE` | bool | `false` | Enable verbose validation logging |
 
@@ -318,11 +318,11 @@ enlace extract paper.pdf --ocr easyocr
 - Built-in levels: `"quick"`, `"standard"`, `"comprehensive"`
 - Can define custom levels in config file
 
-**`output_dir`** (Path, default: `Path("validation_reports")`)
+**`output_dir`** (Path, default: Auto-detected)
 
-- Directory for validation reports
-- Reports saved as JSON files
-- One report per validated extraction
+- Directory for validation reports (auto-detects from extraction path)
+- Reports saved as `{output_dir}/{paper_id}/validation.json`
+- Saves alongside extraction.json when not explicitly specified
 
 **`fail_on_issues`** (bool, default: `false`)
 
@@ -408,7 +408,7 @@ max_workers = 8
 
 [tool.enlace.validation]
 level = "standard"
-output_dir = "validation_reports"
+# output_dir auto-detects from extraction path by default
 fail_on_issues = true
 ```
 
@@ -432,7 +432,7 @@ log_file = "enlace.log"
 
 [tool.enlace.validation]
 level = "comprehensive"
-output_dir = "validation_reports"
+# output_dir auto-detects from extraction path by default
 fail_on_issues = true
 verbose = true
 ```

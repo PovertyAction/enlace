@@ -388,3 +388,118 @@ class ValidationConfig(BaseSettings):
 
         """
         self.levels[name] = checks
+
+
+class SummaryConfig(BaseSettings):
+    """Configuration for research paper summarization."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="ENLACE_SUMMARY_",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # Sensitive fields that should never be saved
+    _SENSITIVE_FIELDS = {"claude_api_key"}
+
+    # LLM settings
+    llm_model: str = Field(
+        default="claude-3-5-haiku-20241022",
+        description="LLM model for summarization",
+    )
+    claude_api_key: str | None = Field(
+        default=None, description="Anthropic API key (or use ANTHROPIC_API_KEY env var)"
+    )
+    temperature: float = Field(
+        default=0.3, ge=0.0, le=1.0, description="LLM temperature (0.0-1.0)"
+    )
+    max_tokens: int = Field(
+        default=4096, gt=0, description="Maximum tokens for LLM response"
+    )
+
+    # Summary settings
+    detail_level: str = Field(
+        default="standard",
+        description="Summary detail level: brief, standard, or detailed",
+    )
+    include_pdf_analysis: bool = Field(
+        default=False, description="Analyze original PDF directly (requires PDF path)"
+    )
+    use_web_search: bool = Field(
+        default=False, description="Enhance with web search for citations/context"
+    )
+    include_table_summaries: bool = Field(
+        default=True, description="Generate summaries for each extracted table"
+    )
+    include_validation_insights: bool = Field(
+        default=True, description="Include validation quality metrics and issues"
+    )
+
+    # Web search settings
+    web_search_enabled: bool = Field(
+        default=False, description="Enable web search enhancement"
+    )
+    web_search_max_results: int = Field(
+        default=3, ge=1, le=10, description="Maximum search results to retrieve"
+    )
+
+    # Output settings
+    output_dir: Path = Field(
+        default=Path("."), description="Output directory for summaries"
+    )
+    output_format: str = Field(
+        default="json", description="Output format: json, markdown, or both"
+    )
+    verbose: bool = Field(default=False, description="Enable verbose logging")
+
+    @classmethod
+    def load_config(
+        cls,
+        config_file: Path | None = None,
+        **cli_args: Any,
+    ) -> "SummaryConfig":
+        """Load configuration with priority: defaults < file < env vars < CLI args.
+
+        Args:
+            config_file: Optional TOML configuration file
+            **cli_args: CLI argument overrides
+
+        Returns:
+            Loaded configuration
+
+        Raises:
+            ConfigError: If configuration loading fails
+
+        """
+        file_config = {}
+
+        # Load from config file if provided
+        if config_file and config_file.exists():
+            try:
+                with open(config_file, "rb") as f:
+                    data = tomllib.load(f)
+                # Support both [summary] and [tool.enlace.summary] sections
+                if "summary" in data:
+                    file_config = data["summary"]
+                elif (
+                    "tool" in data
+                    and "enlace" in data["tool"]
+                    and "summary" in data["tool"]["enlace"]
+                ):
+                    file_config = data["tool"]["enlace"]["summary"]
+            except Exception as e:
+                raise ConfigError(f"Invalid config file {config_file}: {e}") from e
+
+        # CLI args override file config
+        cli_config = {k: v for k, v in cli_args.items() if v is not None}
+        return cls(**{**file_config, **cli_config})
+
+    def to_safe_dict(self) -> dict[str, Any]:
+        """Export configuration as dict, excluding sensitive fields.
+
+        Returns:
+            Dictionary with config values, excluding sensitive fields
+
+        """
+        return self.model_dump(exclude_none=True, exclude=self._SENSITIVE_FIELDS)

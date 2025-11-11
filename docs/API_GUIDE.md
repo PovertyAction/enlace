@@ -188,7 +188,7 @@ if not result.passed:
 
 # Comprehensive validation
 result = validator.validate(extraction, level="comprehensive")
-result.save(Path("validation_reports"))
+result.save(Path("output"))  # Saves to output/{paper_id}/validation.json
 ```
 
 #### `validate_batch(extractions: list[ExtractionResult] | Path, level: str | None = None) -> BatchValidationResult`
@@ -379,12 +379,14 @@ Configuration for validation with customizable levels.
 ```python
 ValidationConfig(
     level: str = "standard",
-    output_dir: Path = Path("validation_reports"),
+    output_dir: Path = Path("validation_reports"),  # Note: Auto-detected in CLI
     fail_on_issues: bool = False,
     levels: dict[str, list[str]] = {...},
     verbose: bool = False
 )
 ```
+
+**Note:** When using the CLI (`enlace validate`), the `output_dir` is automatically inferred from the extraction file path. The validation report is saved to `{output_dir}/{paper_id}/validation.json` alongside the extraction file.
 
 **Class Methods:**
 
@@ -510,7 +512,7 @@ Save validation report to JSON file.
 
 ```python
 result = validator.validate(extraction)
-result.save(Path("validation_reports"))
+result.save(Path("output"))  # Saves to output/{paper_id}/validation.json
 
 # Check results
 if not result.passed:

@@ -19,8 +19,9 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from enlace.core.config import ExtractionConfig, ValidationConfig
+from enlace.core.config import ExtractionConfig, SummaryConfig, ValidationConfig
 from enlace.core.extractor import PaperExtractor
+from enlace.core.summarizer import PaperSummarizer
 from enlace.core.validator import ExtractionValidator
 from enlace.exceptions import EnlaceError
 from enlace.utils.logging import setup_logging
@@ -390,6 +391,202 @@ def validate(
     except EnlaceError as e:
         logger.error(str(e))
         typer.secho(f"✗ Error: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def summarize(
+    extraction_path: Path = typer.Argument(
+        ...,
+        help="Path to extraction.json or directory containing it",
+        exists=True,
+    ),
+    output_dir: Path = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output directory (default: same as extraction)",
+    ),
+    validation_path: Path | None = typer.Option(
+        None,
+        "--validation",
+        help="Path to validation.json (auto-detected if not provided)",
+    ),
+    pdf_path: Path | None = typer.Option(
+        None,
+        "--pdf",
+        help="Path to original PDF (enables direct PDF analysis)",
+    ),
+    llm_model: str = typer.Option(
+        "claude-3-5-haiku-20241022",
+        "--model",
+        help="LLM model to use for summarization",
+    ),
+    detail_level: str = typer.Option(
+        "standard",
+        "--level",
+        help="Summary detail level: brief, standard, or detailed",
+    ),
+    output_format: str = typer.Option(
+        "json",
+        "--format",
+        help="Output format: json, markdown, or both",
+    ),
+    use_web_search: bool = typer.Option(
+        False,
+        "--web-search",
+        help="Enhance summary with web search",
+    ),
+    config_file: Path | None = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Configuration file",
+        exists=True,
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Enable verbose output",
+    ),
+    log_level: str = typer.Option(
+        "INFO",
+        "--log-level",
+        help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    ),
+):
+    """Generate LLM-based summary from extraction results.
+
+    This command creates structured summaries of research papers using the
+    extraction artifacts and optional validation results. The summary includes
+    research questions, methodology, findings, and quality assessments.
+
+    Examples:
+        # Basic usage
+        enlace summarize output/paper/extraction.json
+
+        # With validation and custom output
+        enlace summarize output/paper --output summaries/
+
+        # Generate markdown format
+        enlace summarize output/paper --format markdown
+
+        # Use different model with detailed summary
+        enlace summarize output/paper --model claude-3-5-haiku-20241022 --level detailed
+
+    """
+    try:
+        setup_logging(level=log_level, verbose=verbose)
+        logger.info(f"Starting summarization: {extraction_path}")
+
+        # Convert to Path
+        extraction_path = Path(extraction_path)
+
+        # Infer output directory from extraction path if not provided
+        if output_dir is None:
+            # If extraction_path is like "output/paper_id/extraction.json"
+            # use "output" as the output_dir
+            if extraction_path.name == "extraction.json":
+                output_dir = extraction_path.parent.parent
+            else:
+                # If extraction_path is a directory, use its parent
+                output_dir = (
+                    extraction_path.parent
+                    if extraction_path.is_file()
+                    else extraction_path
+                )
+
+        # Auto-detect validation.json if not provided
+        if validation_path is None:
+            # Try to find validation.json in same directory
+            if extraction_path.name == "extraction.json":
+                potential_validation = extraction_path.parent / "validation.json"
+            else:
+                potential_validation = extraction_path / "validation.json"
+
+            if potential_validation.exists():
+                validation_path = potential_validation
+                logger.info(f"Auto-detected validation file: {validation_path}")
+
+        # Load configuration
+        config = SummaryConfig.load_config(
+            config_file=config_file,
+            llm_model=llm_model,
+            detail_level=detail_level,
+            output_format=output_format,
+            use_web_search=use_web_search,
+            output_dir=output_dir,
+            verbose=verbose,
+        )
+
+        # Create summarizer and generate summary
+        console.print("\n[bold cyan]Generating summary...[/]")
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("[cyan]Calling LLM...", total=3)
+
+            # Initialize
+            summarizer = PaperSummarizer(config)
+            progress.advance(task)
+
+            # Generate summary
+            progress.update(task, description="[cyan]Generating summary...")
+            result = summarizer.summarize(
+                extraction_path=extraction_path,
+                validation_path=validation_path,
+                pdf_path=pdf_path,
+            )
+            progress.advance(task)
+
+            # Save results
+            progress.update(task, description="[cyan]Saving results...")
+            result.save(output_dir, format=output_format)
+            progress.advance(task)
+
+        # Display results
+        console.print(f"\n[bold green]✓ Summary complete: {result.paper_id}[/]")
+
+        if result.title:
+            console.print(f"\n[bold]Title:[/] {result.title}")
+        if result.overview:
+            console.print(f"\n[bold]Overview:[/]\n{result.overview}")
+
+        console.print("\n[bold cyan]Quality Metrics:[/]")
+        console.print(f"  Extraction Quality: {result.extraction_quality:.2f}")
+        console.print(f"  Validation Score: {result.validation_score:.2f}")
+
+        if result.key_findings:
+            console.print("\n[bold cyan]Key Findings:[/]")
+            for finding in result.key_findings[:3]:
+                console.print(f"  • {finding}")
+            if len(result.key_findings) > 3:
+                console.print(f"  ... and {len(result.key_findings) - 3} more")
+
+        # Output location
+        paper_dir = output_dir / result.paper_id
+        if output_format == "both":
+            console.print(
+                f"\n[bold]Output:[/] {paper_dir / 'summary.json'}, {paper_dir / 'summary.md'}"
+            )
+        else:
+            ext = "json" if output_format == "json" else "md"
+            console.print(f"\n[bold]Output:[/] {paper_dir / f'summary.{ext}'}")
+
+        if result.processing_time_seconds:
+            console.print(
+                f"[dim]Processing time: {result.processing_time_seconds:.1f}s[/]"
+            )
+
+    except EnlaceError as e:
+        logger.error(str(e))
+        console.print(f"[bold red]✗ Error:[/] {e}")
         raise typer.Exit(code=1)
 
 
