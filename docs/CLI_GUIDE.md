@@ -264,6 +264,176 @@ Recommendations:
 - `0` - Validation passed (or issues found but --fail-on-issues not set)
 - `1` - Validation failed and --fail-on-issues set, or validation error
 
+### `enlace summarize`
+
+Generate LLM-based research summaries from extraction results.
+
+**Usage:**
+
+```bash
+uv run enlace summarize [OPTIONS] EXTRACTION_PATH
+```
+
+**Arguments:**
+
+- `EXTRACTION_PATH` - Path to extraction.json or directory containing it (required)
+
+**Options:**
+
+| Option | Short | Default | Description |
+|--------|-------|---------|-------------|
+| `--output` | `-o` | Same as extraction | Output directory for summary files |
+| `--validation` | | Auto-detected | Path to validation.json (optional) |
+| `--pdf` | | `None` | Path to original PDF for enhanced analysis |
+| `--model` | | `claude-3-5-haiku-20241022` | LLM model for summarization |
+| `--level` | | `standard` | Detail level (brief, standard, detailed) |
+| `--format` | | `json` | Output format (json, markdown, both) |
+| `--web-search` | | `False` | Enhance summary with web search |
+| `--config` | `-c` | `None` | Path to configuration file |
+| `--verbose` | `-v` | `False` | Enable verbose output |
+
+**Summary Detail Levels:**
+
+1. **brief** - Concise summary
+   - Title and overview only
+   - Key findings (top 3)
+   - Basic metadata
+
+2. **standard** (default) - Balanced detail
+   - All brief content
+   - Research question and methodology
+   - Treatment and sample information
+   - Policy implications
+   - Quality assessment
+
+3. **detailed** - Comprehensive summary
+   - All standard content
+   - Table-by-table summaries
+   - Detailed validation issues
+   - Statistical methods
+   - Data source information
+
+**Examples:**
+
+```bash
+# Basic usage (requires ANTHROPIC_API_KEY)
+export ANTHROPIC_API_KEY=your_api_key
+uv run enlace summarize output/paper/extraction.json
+
+# With auto-detected validation
+uv run enlace summarize output/paper/
+
+# Custom model and detail level
+uv run enlace summarize output/paper/ \
+    --model claude-3-5-sonnet-20241022 \
+    --level detailed
+
+# Generate markdown format
+uv run enlace summarize output/paper/ --format markdown
+
+# Both JSON and markdown
+uv run enlace summarize output/paper/ --format both -o summaries/
+
+# Enhanced with web search (slower, requires internet)
+uv run enlace summarize output/paper/ --web-search
+
+# With validation and PDF for comprehensive analysis
+uv run enlace summarize output/paper/ \
+    --validation output/paper/validation.json \
+    --pdf papers/paper.pdf \
+    --level detailed \
+    --format both
+```
+
+**Output:**
+
+```text
+output/
+└── paper_id/
+    ├── extraction.json         # Original extraction
+    ├── validation.json         # Validation report (if exists)
+    ├── summary.json            # Generated summary (JSON)
+    └── summary.md              # Generated summary (Markdown, if --format markdown/both)
+```
+
+**Example JSON Output:**
+
+```json
+{
+  "paper_id": "smith_2020_rct",
+  "title": "Job Referral Networks Disadvantage Women in Labor Markets",
+  "overview": "Field experiment in Malawi examining how job referral networks systematically disadvantage qualified women through gender-biased referral patterns.",
+  "research_question": "Do job referral networks inherently disadvantage women in the labor market?",
+  "methodology": "Randomized field experiment with 767 job applicants. Participants randomly assigned to refer women, men, or anyone, with cross-randomized payment structures.",
+  "sample_size": "767 job applicants",
+  "treatment_info": "Applicants randomly assigned to referral treatments: must refer a woman, must refer a man, or can refer anyone",
+  "key_findings": [
+    "Only 30% of referrals were women (vs 38% of original applicants)",
+    "Men systematically refer other men (77% of men's referrals)",
+    "Women refer less qualified candidates across both genders"
+  ],
+  "implications": "Job referral networks can perpetuate gender wage gaps. Employers may need quota systems or carefully designed referral contracts to mitigate these effects.",
+  "authors": ["Lori Beaman", "Niall Keleher", "Jeremy Magruder"],
+  "institutions": ["Northwestern University", "UC Berkeley"],
+  "timeline": "2013",
+  "study_type": "RCT",
+  "extraction_quality": 0.72,
+  "validation_score": 0.56,
+  "llm_model": "claude-3-5-haiku-20241022"
+}
+```
+
+**Example Markdown Output:**
+
+```markdown
+# Job Networks Disadvantage Women in Labor Market
+
+## Study Details
+**Authors:** Lori Beaman, Niall Keleher, Jeremy Magruder
+**Institutions:** Northwestern University, UC Berkeley
+**Timeline:** 2013
+**Study Type:** RCT
+**Sample Size:** 767 job applicants
+
+## Overview
+Field experiment in Malawi examining how job referral networks systematically disadvantage qualified women through gender-biased referral patterns.
+
+## Research Question
+Do job referral networks inherently disadvantage women in the labor market?
+
+## Methodology
+Randomized field experiment with job applicants in Malawi, varying referral gender requirements and payment incentives.
+
+## Key Findings
+- Only 30% of referrals were women (vs 38% of original applicants)
+- Men systematically refer other men (77% of men's referrals)
+- Women refer less qualified candidates across both genders
+
+## Implications
+Job referral networks can perpetuate gender wage gaps by systematically disadvantaging qualified women. Employers may need quota systems or carefully designed referral contracts to mitigate these effects.
+
+## Data Quality Assessment
+**Extraction Quality:** 0.72
+**Validation Score:** 0.56
+
+**Issues:**
+- Missing table IDs for 5 tables
+- Missing table types for 5 tables
+```
+
+**Exit Codes:**
+
+- `0` - Success
+- `1` - Error (extraction not found, LLM error, API key missing)
+
+**Requirements:**
+
+- `ANTHROPIC_API_KEY` environment variable must be set
+- Valid extraction.json file
+- Internet connection (for LLM API calls and optional web search)
+
+---
+
 ### `enlace batch`
 
 Process multiple papers in batch with parallel processing.
@@ -629,6 +799,14 @@ embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
 level = "comprehensive"
 # output_dir auto-detects from extraction path by default
 fail_on_issues = true
+
+[tool.enlace.summary]
+llm_model = "claude-3-5-haiku-20241022"
+temperature = 0.3
+max_tokens = 4096
+detail_level = "standard"
+use_web_search = false
+output_format = "both"
 ```
 
 See [CONFIGURATION.md](CONFIGURATION.md) for complete reference.
@@ -638,6 +816,7 @@ See [CONFIGURATION.md](CONFIGURATION.md) for complete reference.
 All configuration options can be set via environment variables with `ENLACE_` prefix:
 
 ```bash
+# Extraction settings
 export ENLACE_ENABLE_OCR=true
 export ENLACE_OCR_BACKEND=auto
 export ENLACE_ENABLE_AUGMENTATION=true
@@ -646,6 +825,15 @@ export ENLACE_DESCRIBE_PICTURES=false  # Enable to include vision model annotati
 export ENLACE_OUTPUT_FORMAT=json
 export ENLACE_LLM_MODEL=claude-4-5-haiku
 export ENLACE_VALIDATION_LEVEL=comprehensive
+
+# Summary settings
+export ENLACE_SUMMARY_MODEL=claude-3-5-sonnet-20241022
+export ENLACE_SUMMARY_TEMPERATURE=0.3
+export ENLACE_SUMMARY_DETAIL_LEVEL=detailed
+export ENLACE_SUMMARY_WEB_SEARCH=true
+
+# API key (required for augmentation and summarization)
+export ANTHROPIC_API_KEY=your_api_key
 ```
 
 ### Configuration Priority
@@ -669,22 +857,26 @@ Configuration is loaded in this order (later overrides earlier):
 
 ## Common Workflows
 
-### Extract and Validate Single Paper
+### Extract, Validate, and Summarize Single Paper
 
 ```bash
-# Extract with comprehensive settings
+# Step 1: Extract with comprehensive settings
 uv run enlace extract paper.pdf --augment --ocr auto --output results/
 
-# Validate with comprehensive checks
+# Step 2: Validate with comprehensive checks
 uv run enlace validate results/paper/extraction.json \
     --level comprehensive \
     --fail-on-issues
+
+# Step 3: Generate summary
+export ANTHROPIC_API_KEY=your_api_key
+uv run enlace summarize results/paper/ --format both
 ```
 
-### Batch Processing with Quality Control
+### Batch Processing with Quality Control and Summaries
 
 ```bash
-# Process directory with validation
+# Step 1: Process directory with validation
 uv run enlace batch papers/ \
     --output batch_results/ \
     --workers 8 \
@@ -693,11 +885,39 @@ uv run enlace batch papers/ \
     --validate \
     --validation-level comprehensive
 
-# Review batch summary
+# Step 2: Review batch summary
 cat batch_results/batch_summary.json
 
-# Check validation reports for issues
+# Step 3: Generate summaries for all papers
+for dir in batch_results/*/; do
+    uv run enlace summarize "$dir" --format both -o summaries/
+done
+
+# Step 4: Check validation reports for issues
 grep -l '"passed": false' batch_results/*/validation.json
+```
+
+### Complete Meta-Analysis Pipeline
+
+```bash
+# Full workflow: extract → validate → summarize
+export ANTHROPIC_API_KEY=your_api_key
+
+# 1. Batch extract with augmentation
+uv run enlace batch papers/ --ocr auto --augment -o extractions/
+
+# 2. Validate all extractions
+for file in extractions/*/extraction.json; do
+    uv run enlace validate "$file" --level comprehensive --fail-on-issues
+done
+
+# 3. Generate summaries for all papers
+for dir in extractions/*/; do
+    uv run enlace summarize "$dir" --format both -o summaries/
+done
+
+# 4. Review summaries for screening
+ls summaries/*.md
 ```
 
 ### Re-extract with Different OCR Backend
@@ -834,6 +1054,74 @@ uv run enlace batch papers/
    for f in papers/*.pdf; do
        uv run enlace extract "$f" --output batch_output/
    done
+   ```
+
+### Summarization Fails
+
+**Problem:** `enlace summarize` command fails with API errors.
+
+**Solution:**
+
+1. Ensure Anthropic API key is set:
+
+   ```bash
+   export ANTHROPIC_API_KEY=your_api_key
+   echo $ANTHROPIC_API_KEY  # Verify it's set
+   ```
+
+2. Check model availability and configuration:
+
+   ```bash
+   # Use Haiku for faster, cheaper summaries
+   uv run enlace summarize output/paper/ --model claude-3-5-haiku-20241022
+
+   # Or Sonnet for higher quality
+   uv run enlace summarize output/paper/ --model claude-3-5-sonnet-20241022
+   ```
+
+3. Verify extraction file exists and is valid:
+
+   ```bash
+   # Check extraction file
+   ls -lh output/paper/extraction.json
+
+   # Validate JSON format
+   python -m json.tool output/paper/extraction.json > /dev/null
+   ```
+
+### Summary Quality Issues
+
+**Problem:** Generated summaries are missing information or inaccurate.
+
+**Solution:**
+
+1. Use more detailed level for comprehensive summaries:
+
+   ```bash
+   uv run enlace summarize output/paper/ --level detailed
+   ```
+
+2. Enable web search for additional context:
+
+   ```bash
+   uv run enlace summarize output/paper/ --web-search
+   ```
+
+3. Provide validation results and original PDF:
+
+   ```bash
+   uv run enlace summarize output/paper/ \
+       --validation output/paper/validation.json \
+       --pdf papers/original.pdf \
+       --level detailed
+   ```
+
+4. Use more powerful model:
+
+   ```bash
+   uv run enlace summarize output/paper/ \
+       --model claude-3-5-sonnet-20241022 \
+       --level detailed
    ```
 
 ## Getting Help

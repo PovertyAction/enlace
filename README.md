@@ -80,6 +80,23 @@ enlace validate output/paper/extraction.json --level comprehensive
 enlace validate output/paper/extraction.json --fail-on-issues
 ```
 
+### Generate Research Summaries
+
+```bash
+# Basic summary (requires ANTHROPIC_API_KEY)
+export ANTHROPIC_API_KEY=your_api_key
+enlace summarize output/paper/extraction.json
+
+# Generate markdown summary
+enlace summarize output/paper --format markdown
+
+# Use custom output directory
+enlace summarize output/paper -o summaries/
+
+# Enhanced summary with web search
+enlace summarize output/paper --web-search
+```
+
 ### Batch Processing
 
 ```bash
@@ -228,6 +245,122 @@ enlace validate output/paper/extraction.json --level quick
 enlace validate output/paper/extraction.json --config .enlace.toml
 ```
 
+### Research Paper Summarization
+
+Generate structured, LLM-based summaries of research papers from extraction results:
+
+**Features:**
+
+- **Structured Output** - JSON and Markdown formats with standardized sections
+- **Multi-Source Integration** - Combines extraction data, validation results, and optional PDF analysis
+- **Anti-Hallucination** - Strict prompting prevents fabrication of data
+- **Customizable Detail Levels** - Brief, standard, or detailed summaries
+- **Web Search Enhancement** - Optional web search for additional context
+- **Quality Assessment** - Includes extraction quality scores and validation issues
+
+**Summary Sections:**
+
+- Title (50-60 character jargon-free)
+- Research question and methodology
+- Sample information and treatment details
+- Key findings with specific metrics
+- Policy implications
+- Data quality assessment
+
+**Usage:**
+
+```bash
+# Basic usage
+enlace summarize output/paper/extraction.json
+
+# With validation results (auto-detected)
+enlace summarize output/paper/
+
+# Custom model and detail level
+enlace summarize output/paper/ --model claude-3-5-sonnet-20241022 --level detailed
+
+# Generate markdown format
+enlace summarize output/paper/ --format markdown
+
+# Both JSON and markdown
+enlace summarize output/paper/ --format both -o summaries/
+
+# Enhanced with web search
+enlace summarize output/paper/ --web-search
+```
+
+**Example Output (Markdown):**
+
+```markdown
+# Study Title
+## Study Details
+**Authors:** Smith J, Jones A
+**Timeline:** 2015-2017
+**Study Type:** RCT
+**Sample Size:** 1,200 households
+
+## Overview
+Brief description of the research question and significance...
+
+## Key Findings
+- Treatment increased school attendance by 15% (SE: 0.03, p<0.001)
+- Effects strongest for girls (+20% vs +10% for boys)
+
+## Data Quality Assessment
+**Extraction Quality:** 0.85
+**Validation Score:** 0.78
+```
+
+**Customizing the Summarizer:**
+
+The summarizer can be customized via Python API or configuration:
+
+```python
+from pathlib import Path
+from enlace.core.summarizer import PaperSummarizer
+from enlace.core.config import SummaryConfig
+
+# Custom configuration
+config = SummaryConfig(
+    llm_model="claude-3-5-sonnet-20241022",  # Use more powerful model
+    temperature=0.3,  # Lower = more conservative
+    max_tokens=4096,  # Longer summaries
+    detail_level="detailed",  # brief, standard, or detailed
+    use_web_search=True,  # Enable web search
+)
+
+# Initialize summarizer
+summarizer = PaperSummarizer(config)
+
+# Generate summary
+extraction_path = Path("output/paper/extraction.json")
+result = summarizer.summarize(extraction_path)
+
+# Save in both formats
+result.save_json(Path("summaries/paper_summary.json"))
+result.save_markdown(Path("summaries/paper_summary.md"))
+```
+
+**Custom Summary Prompts:**
+
+To modify the summary structure or focus, edit the prompts in `src/enlace/core/summarizer.py`:
+
+- `SYSTEM_PROMPT` - Controls the LLM's role and anti-hallucination rules
+- `SUMMARY_TEMPLATE` - Defines the output structure and JSON schema
+
+**Environment Configuration:**
+
+```bash
+# Set default model
+export ENLACE_SUMMARY_MODEL=claude-3-5-sonnet-20241022
+
+# Set temperature (0.0-1.0, lower = more conservative)
+export ENLACE_SUMMARY_TEMPERATURE=0.2
+
+# Enable web search by default
+export ENLACE_SUMMARY_WEB_SEARCH=true
+```
+
 ### Batch Processing
 
 Process multiple papers in parallel with automatic validation:
@@ -289,6 +422,14 @@ embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
 [tool.enlace.validation]
 level = "comprehensive"
 fail_on_issues = true
+
+[tool.enlace.summary]
+llm_model = "claude-3-5-haiku-20241022"
+temperature = 0.3
+max_tokens = 4096
+detail_level = "standard"
+use_web_search = false
+output_format = "both"
 ```
 
 ### Environment Variables
@@ -296,6 +437,7 @@ fail_on_issues = true
 All options can be set via environment variables with `ENLACE_` prefix:
 
 ```bash
+# Extraction settings
 export ENLACE_ENABLE_OCR=true
 export ENLACE_OCR_BACKEND=auto
 export ENLACE_ENABLE_AUGMENTATION=true
@@ -303,7 +445,15 @@ export ENLACE_EXTRACT_FIGURES=true
 export ENLACE_DESCRIBE_PICTURES=true  # Enable vision model annotations
 export ENLACE_OUTPUT_FORMAT=both
 export ENLACE_MAX_WORKERS=8
-export ANTHROPIC_API_KEY=your_api_key  # Required for augmentation
+
+# Summary settings
+export ENLACE_SUMMARY_MODEL=claude-3-5-sonnet-20241022
+export ENLACE_SUMMARY_TEMPERATURE=0.3
+export ENLACE_SUMMARY_DETAIL_LEVEL=detailed
+export ENLACE_SUMMARY_WEB_SEARCH=true
+
+# API key (required for augmentation and summarization)
+export ANTHROPIC_API_KEY=your_api_key
 ```
 
 ### Configuration Priority
@@ -391,8 +541,35 @@ for file in extractions/*/extraction.json; do
     enlace validate "$file" --level comprehensive --fail-on-issues
 done
 
-# 3. Export to CSV for analysis
+# 3. Generate summaries for all papers
+for dir in extractions/*/; do
+    enlace summarize "$dir" --format both -o summaries/
+done
+
+# 4. Export to CSV for analysis
 # (CSV files are in extractions/*/tables/)
+```
+
+### Complete Research Paper Processing Workflow
+
+```bash
+# Single paper: extract → validate → summarize
+enlace extract paper.pdf --ocr auto --augment -o output/
+enlace validate output/paper/ --level comprehensive
+enlace summarize output/paper/ --format both
+
+# Batch processing with summaries
+enlace batch papers/ \
+    --ocr auto \
+    --augment \
+    --validate \
+    --validation-level comprehensive \
+    -o batch_output/
+
+# Generate summaries for all
+for dir in batch_output/*/; do
+    enlace summarize "$dir" --format markdown -o summaries/
+done
 ```
 
 ### OCR Quality Comparison
