@@ -78,6 +78,31 @@ def extract(
     no_hybrid_ocr: bool = typer.Option(
         False, "--no-hybrid-ocr", help="Disable hybrid OCR fallback"
     ),
+    use_camelot: bool = typer.Option(
+        True,
+        "--use-camelot/--no-camelot",
+        help="Enable Camelot table extraction (default: True)",
+    ),
+    use_docling: bool = typer.Option(
+        False,
+        "--use-docling",
+        help="Enable docling table extraction and reconciliation with Camelot (default: False, Camelot-only)",
+    ),
+    camelot_fallback_only: bool = typer.Option(
+        True,
+        "--camelot-fallback-only/--camelot-always",
+        help="Only use Camelot when docling quality is low (only applies when --use-docling is enabled)",
+    ),
+    reconciliation_strategy: str = typer.Option(
+        "camelot_primary",
+        "--reconciliation-strategy",
+        help="Table reconciliation strategy: camelot_primary (default), confidence_based, prefer_camelot, or prefer_docling",
+    ),
+    keep_converted_pdfs: bool = typer.Option(
+        False,
+        "--keep-converted-pdfs",
+        help="Keep PDF files converted from DOCX/DOC",
+    ),
     format: str = typer.Option(
         "json", "--format", "-f", help="Output format (json, csv, both)"
     ),
@@ -104,11 +129,20 @@ def extract(
     """Extract tables, figures, and metadata from research papers.
 
     Examples:
-        # Basic extraction
+        # Basic extraction (Camelot-only by default)
         enlace extract paper.pdf -o output
 
         # With semantic augmentation
         enlace extract paper.pdf -o output --augment
+
+        # With docling table extraction and reconciliation
+        enlace extract paper.pdf -o output --use-docling
+
+        # Camelot-only with CSV output
+        enlace extract paper.pdf -o output -f csv
+
+        # Extract from DOCX file (auto-converts to PDF)
+        enlace extract paper.docx -o output --keep-converted-pdfs
 
         # Dry-run to estimate OCR requirements
         enlace extract paper.pdf --ocr auto --dry-run
@@ -137,6 +171,11 @@ def extract(
             ocr_backend=ocr_backend if ocr_backend != "none" else "auto",
             hybrid_ocr_enabled=not no_hybrid_ocr,
             ocr_confidence_threshold=ocr_confidence,
+            enable_camelot=use_camelot,
+            enable_docling_tables=use_docling,
+            camelot_fallback_only=camelot_fallback_only,
+            reconciliation_strategy=reconciliation_strategy,
+            keep_converted_pdfs=keep_converted_pdfs,
             output_format=format,
             output_dir=output_dir,
             verbose=verbose,
@@ -338,7 +377,7 @@ def validate(
                 output_dir = (
                     extraction_path.parent
                     if extraction_path.is_file()
-                    else extraction_path
+                    else extraction_path.parent
                 )
 
         config = ValidationConfig.load_config(

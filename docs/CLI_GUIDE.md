@@ -33,14 +33,17 @@ You should see the main help message with available commands.
 ### Extract from a Single Paper
 
 ```bash
-# Basic extraction (no OCR, no augmentation)
+# Basic extraction (Camelot-only, no OCR, no augmentation)
 uv run enlace extract paper.pdf
 
-# With output directory
-uv run enlace extract paper.pdf --output output/
+# With output directory and CSV format
+uv run enlace extract paper.pdf --output output/ --format csv
 
 # Enable OCR for scanned documents
 uv run enlace extract paper.pdf --ocr auto
+
+# Enable docling extraction with reconciliation (dual extraction mode)
+uv run enlace extract paper.pdf --use-docling
 
 # Enable semantic augmentation
 uv run enlace extract paper.pdf --augment
@@ -93,11 +96,15 @@ uv run enlace extract [OPTIONS] INPUT_PATH
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
 | `--output` | `-o` | `output` | Output directory for results |
-| `--augment` | | `False` | Enable semantic augmentation with RAG |
-| `--vlm` | | `False` | Enable VLM fallback for low-quality tables |
+| `--use-camelot / --no-camelot` | | `True` | Enable Camelot table extraction |
+| `--use-docling` | | `False` | Enable docling table extraction and reconciliation with Camelot |
+| `--camelot-fallback-only / --camelot-always` | | `True` | Only use Camelot when docling quality is low (only applies with --use-docling) |
+| `--reconciliation-strategy` | | `camelot_primary` | Table reconciliation strategy (camelot_primary, confidence_based, prefer_camelot, prefer_docling) |
+| `--augment` | | `False` | Enable semantic augmentation with RAG (works with any extraction mode) |
+| `--vlm` | | `False` | Enable VLM fallback for low-quality tables (requires --use-docling) |
 | `--vlm-framework` | | `auto` | VLM framework (auto, transformers, mlx) |
 | `--claude-cleanup` | | `False` | Enable Claude cleanup pass (requires API key) |
-| `--ocr` | | `None` | Enable OCR (auto, tesseract, easyocr) |
+| `--ocr` | | `None` | Enable OCR (auto, tesseract, easyocr) - enhances PDF quality for all extraction modes |
 | `--ocr-confidence` | | `0.8` | OCR confidence threshold (0.0-1.0) |
 | `--no-hybrid-ocr` | | `False` | Disable hybrid OCR fallback |
 | `--format` | `-f` | `json` | Output format (json, csv, both) |
@@ -107,11 +114,23 @@ uv run enlace extract [OPTIONS] INPUT_PATH
 **Examples:**
 
 ```bash
-# Basic extraction
+# Basic extraction (Camelot-only by default)
 uv run enlace extract paper.pdf
 
 # With OCR (auto mode = Tesseract + EasyOCR fallback)
 uv run enlace extract scanned_paper.pdf --ocr auto
+
+# CSV output format (Camelot-only)
+uv run enlace extract paper.pdf --format csv -o results/
+
+# Disable Camelot, docling-only extraction
+uv run enlace extract paper.pdf --no-camelot --use-docling
+
+# Enable docling extraction with reconciliation (dual extraction mode)
+uv run enlace extract paper.pdf --use-docling
+
+# Dual extraction with camelot_primary reconciliation (default strategy)
+uv run enlace extract paper.pdf --use-docling --reconciliation-strategy camelot_primary
 
 # Specify OCR backend explicitly
 uv run enlace extract paper.pdf --ocr tesseract
@@ -123,17 +142,17 @@ uv run enlace extract paper.pdf --ocr auto --ocr-confidence 0.9
 # Disable hybrid fallback (use only primary backend)
 uv run enlace extract paper.pdf --ocr tesseract --no-hybrid-ocr
 
-# Full pipeline with augmentation and CSV output
+# Full pipeline with augmentation and CSV output (Camelot-only)
 uv run enlace extract paper.pdf --augment --ocr auto --format both -o results/
 
-# Enable VLM fallback for complex tables (Granite-Docling)
-uv run enlace extract paper.pdf --vlm --ocr auto
+# Enable VLM fallback for complex tables (requires --use-docling)
+uv run enlace extract paper.pdf --use-docling --vlm --ocr auto
 
 # VLM with specific framework (faster on macOS)
-uv run enlace extract paper.pdf --vlm --vlm-framework mlx
+uv run enlace extract paper.pdf --use-docling --vlm --vlm-framework mlx
 
-# Two-pass VLM: Granite + Claude cleanup (highest accuracy)
-uv run enlace extract paper.pdf --vlm --claude-cleanup --ocr auto
+# Two-pass VLM: Granite + Claude cleanup (highest accuracy, requires --use-docling)
+uv run enlace extract paper.pdf --use-docling --vlm --claude-cleanup --ocr auto
 
 # Using configuration file
 uv run enlace extract paper.pdf --config .enlace.toml
@@ -141,7 +160,9 @@ uv run enlace extract paper.pdf --config .enlace.toml
 
 **Output:**
 
-The command creates a directory structure:
+The command creates a directory structure depending on the extraction mode:
+
+**Camelot-only mode (default):**
 
 ```text
 output/
@@ -149,13 +170,36 @@ output/
     ├── extraction.json          # Main extraction result with figure annotations
     ├── extraction.csv           # CSV format (if --format csv or both)
     ├── paper_id.md              # Markdown with vision model annotations
-    ├── tables/                  # Individual table files
-    │   ├── table_1.json
-    │   ├── table_2.json
-    │   └── ...
+    ├── tables/
+    │   └── camelot/             # Camelot-extracted tables
+    │       ├── table_1.csv      # or .json depending on --format
+    │       ├── table_2.csv
+    │       └── ...
     └── figures/                 # Extracted figures (referenced in markdown)
         ├── figure_1.png
         ├── figure_2.png
+        └── ...
+```
+
+**Dual extraction mode (with --use-docling):**
+
+```text
+output/
+└── paper_id/
+    ├── extraction.json          # Main extraction result
+    ├── paper_id.md              # Markdown
+    ├── tables/
+    │   ├── docling/             # Original docling extractions
+    │   │   ├── table_1.json
+    │   │   └── ...
+    │   ├── camelot/             # Original Camelot extractions
+    │   │   ├── table_1.csv
+    │   │   └── ...
+    │   └── reconciled/          # Final reconciled tables
+    │       ├── table_1.json     # Best-of-both merged results
+    │       └── ...
+    ├── reconciliation_report.json  # Metadata about merging
+    └── figures/
         └── ...
 ```
 
@@ -163,6 +207,26 @@ output/
 
 - **Markdown**: Below each image reference as `VISION MODEL ANNOTATION: [description]`
 - **JSON**: In `extraction.json` under each figure's `annotation` field
+
+**Flag Compatibility:**
+
+The following table shows which enhancement flags work with each extraction mode:
+
+| Flag | Camelot-only | Dual Extraction (--use-docling) | Purpose |
+|------|--------------|--------------------------------|---------|
+| `--augment` | ✅ Yes | ✅ Yes | Adds semantic context to any extracted tables using RAG |
+| `--ocr auto` | ✅ Yes | ✅ Yes | Improves PDF text quality before table extraction |
+| `--vlm` | ❌ No | ✅ Yes | Vision-language model for complex table layouts (docling-specific) |
+
+**Recommended Combinations:**
+
+```bash
+# Best quality Camelot-only extraction
+uv run enlace extract paper.pdf --ocr auto --augment --format csv
+
+# Maximum quality with all enhancements (dual extraction)
+uv run enlace extract paper.pdf --use-docling --vlm --ocr auto --augment --format both
+```
 
 **Exit Codes:**
 
@@ -529,7 +593,11 @@ batch_output/
 
 ### Overview
 
-enlace supports **two-pass VLM extraction** for improved accuracy on complex tables:
+enlace supports **two-pass VLM extraction** for improved accuracy on complex tables.
+
+**IMPORTANT:** VLM features require `--use-docling` flag. They do not work with Camelot-only mode.
+
+**Why?** VLM enhancement is part of the docling parsing pipeline, not Camelot's lattice/stream detection.
 
 1. **Pass 1: Granite-Docling-258M** (Local, Fast)
    - IBM's 258M parameter VLM optimized for document understanding
@@ -553,27 +621,29 @@ VLM fallback activates automatically when **any** condition is met:
 
 ### VLM Usage Examples
 
+**All VLM examples require `--use-docling` flag:**
+
 ```bash
-# Enable Granite-Docling VLM fallback
-uv run enlace extract paper.pdf --vlm --ocr auto
+# Enable Granite-Docling VLM fallback (REQUIRES --use-docling)
+uv run enlace extract paper.pdf --use-docling --vlm --ocr auto
 
 # Specify VLM framework (auto-detects best option)
-uv run enlace extract paper.pdf --vlm --vlm-framework auto
+uv run enlace extract paper.pdf --use-docling --vlm --vlm-framework auto
 
 # Use MLX framework on macOS (10-20x faster)
-uv run enlace extract paper.pdf --vlm --vlm-framework mlx
+uv run enlace extract paper.pdf --use-docling --vlm --vlm-framework mlx
 
 # Use Transformers framework (cross-platform)
-uv run enlace extract paper.pdf --vlm --vlm-framework transformers
+uv run enlace extract paper.pdf --use-docling --vlm --vlm-framework transformers
 
 # Two-pass VLM: Granite + Claude cleanup
 export ENLACE_CLAUDE_API_KEY=sk-ant-...
-uv run enlace extract paper.pdf --vlm --claude-cleanup --ocr auto
+uv run enlace extract paper.pdf --use-docling --vlm --claude-cleanup --ocr auto
 
 # Configure VLM thresholds
 export ENLACE_VLM_NULL_SE_THRESHOLD=0.25  # Trigger if >25% SEs missing
 export ENLACE_VLM_NULL_COEF_THRESHOLD=0.15  # Trigger if >15% coeffs missing
-uv run enlace extract paper.pdf --vlm
+uv run enlace extract paper.pdf --use-docling --vlm
 ```
 
 ### VLM Configuration
@@ -658,7 +728,7 @@ MLX only works on macOS with Apple Silicon. For other platforms:
 
 ```bash
 export ENLACE_VLM_FRAMEWORK=transformers
-uv run enlace extract paper.pdf --vlm
+uv run enlace extract paper.pdf --use-docling --vlm
 ```
 
 #### Claude API Key Error
@@ -668,7 +738,19 @@ uv run enlace extract paper.pdf --vlm
 export ENLACE_CLAUDE_API_KEY=sk-ant-api03-...
 
 # Verify it works
-uv run enlace extract paper.pdf --vlm --claude-cleanup
+uv run enlace extract paper.pdf --use-docling --vlm --claude-cleanup
+```
+
+#### VLM Not Working Without --use-docling
+
+If you get an error or VLM is not being applied, ensure you're using `--use-docling`:
+
+```bash
+# ❌ WRONG: VLM doesn't work with Camelot-only
+uv run enlace extract paper.pdf --vlm
+
+# ✅ CORRECT: VLM requires --use-docling
+uv run enlace extract paper.pdf --use-docling --vlm
 ```
 
 ### VLM Best Practices
