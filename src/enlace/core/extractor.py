@@ -15,14 +15,18 @@ from enlace.core.metadata import (
     extract_methodology,
 )
 from enlace.core.parser import TableParser
+from enlace.core.reconciler import TableReconciler
 from enlace.exceptions import (
     AugmentationError,
     ExtractionError,
     PaperNotFoundError,
     UnsupportedFormatError,
 )
+from enlace.extractors.camelot_extractor import CamelotExtractor, is_text_based_pdf
+from enlace.models.dual_extraction import ConversionMetadata
 from enlace.models.extraction import ExtractionResult
 from enlace.utils.docling_utils import convert_pdf_to_markdown
+from enlace.utils.docx_converter import DocxToPdfConverter, is_docx_file
 from enlace.utils.ocr_backends import OCRBackendManager
 
 logger = logging.getLogger("enlace.extractor")
@@ -67,11 +71,44 @@ class PaperExtractor:
         # Lazy-load augmentation components
         self.table_augmenter = None
 
+        # Initialize Camelot components if enabled
+        self.camelot_extractor = None
+        self.reconciler = None
+        self.docx_converter = None
+
+        if config.enable_camelot:
+            try:
+                self.camelot_extractor = CamelotExtractor(
+                    lattice_line_scale=config.camelot_lattice_line_scale,
+                    stream_edge_tol=config.camelot_stream_edge_tol,
+                    quality_threshold=config.camelot_quality_threshold,
+                    min_table_size=config.camelot_min_table_size,
+                    min_content_density=config.camelot_min_content_density,
+                )
+                self.reconciler = TableReconciler(
+                    match_threshold=config.reconciliation_match_threshold,
+                    reconciliation_strategy=config.reconciliation_strategy,
+                )
+                logger.info("Camelot dual extraction enabled")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Camelot: {e}")
+                config.enable_camelot = False
+
+        # Initialize DOCX converter if needed
+        try:
+            self.docx_converter = DocxToPdfConverter(
+                libreoffice_path=config.libreoffice_path
+            )
+        except Exception as e:
+            logger.warning(f"LibreOffice not available: {e}")
+            self.docx_converter = None
+
         logger.info(
             f"PaperExtractor initialized: ocr={config.enable_ocr}, "
             f"ocr_backend={config.ocr_backend if config.enable_ocr else 'none'}, "
             f"augmentation={config.enable_augmentation}, "
-            f"figures={config.extract_figures}"
+            f"figures={config.extract_figures}, "
+            f"camelot={config.enable_camelot}"
         )
 
     def extract(
@@ -135,6 +172,31 @@ class PaperExtractor:
                 ),
             )
 
+            # Step 0: Convert DOCX/DOC to PDF if needed
+            pdf_path = paper_path
+
+            if is_docx_file(paper_path):
+                if self.docx_converter is None:
+                    raise ExtractionError(
+                        "DOCX file provided but LibreOffice is not available. "
+                        "Please install LibreOffice to convert DOCX/DOC files."
+                    )
+
+                logger.info("Step 0: Converting DOCX to PDF")
+                pdf_path, conv_meta = self.docx_converter.convert_to_pdf(
+                    paper_path,
+                    output_dir=paper_output_dir,
+                    keep_pdf=self.config.keep_converted_pdfs,
+                )
+
+                result.docx_converted = True
+                result.conversion_metadata = ConversionMetadata(**conv_meta)
+
+                logger.info(
+                    f"DOCX converted: {pdf_path.name} "
+                    f"({conv_meta['conversion_time']:.2f}s)"
+                )
+
             # Step 1: Convert PDF to markdown
             logger.info("Step 1: Converting to markdown")
 
@@ -147,7 +209,7 @@ class PaperExtractor:
                 )
 
             markdown_path, conversion_result = convert_pdf_to_markdown(
-                paper_path,
+                pdf_path,  # Use converted PDF if DOCX was provided
                 paper_output_dir,
                 ocr_options=ocr_options,
                 extract_figures=self.config.extract_figures,
@@ -162,19 +224,227 @@ class PaperExtractor:
             # Step 3: Extract tables
             if self.config.extract_tables:
                 logger.info("Step 3: Extracting tables")
-                tables_dict = self.parser.parse_tables_from_document(
-                    conversion_result.document, paper_path.name
-                )
 
-                # Combine all table types
-                result.tables = (
-                    tables_dict["regression"]
-                    + tables_dict["summary"]
-                    + tables_dict["balance"]
-                )
-                result.tables_extracted = len(result.tables)
+                # Extract docling tables only if explicitly enabled
+                docling_tables = []
+                if self.config.enable_docling_tables:
+                    tables_dict = self.parser.parse_tables_from_document(
+                        conversion_result.document, paper_path.name
+                    )
 
-                logger.info(f"Found {len(result.tables)} tables")
+                    # Combine all table types
+                    docling_tables = (
+                        tables_dict["regression"]
+                        + tables_dict["summary"]
+                        + tables_dict["balance"]
+                    )
+                    logger.info(f"Found {len(docling_tables)} docling tables")
+
+                # Step 3.5: Camelot table extraction (default)
+                if self.config.enable_camelot and self.camelot_extractor:
+                    # Check if PDF is text-based (Camelot requirement)
+                    if is_text_based_pdf(pdf_path):
+                        if docling_tables:
+                            logger.info(
+                                "Step 3.5: Running Camelot dual extraction with docling"
+                            )
+                        else:
+                            logger.info(
+                                "Step 3.5: Running Camelot table extraction (Camelot-only mode)"
+                            )
+
+                        try:
+                            # Extract tables with Camelot
+                            camelot_tables = self.camelot_extractor.extract_tables(
+                                pdf_path
+                            )
+
+                            if camelot_tables:
+                                logger.info(
+                                    f"Camelot found {len(camelot_tables)} tables"
+                                )
+
+                                # Handle both Camelot-only and dual extraction modes
+                                if docling_tables:
+                                    # Dual extraction mode: reconcile docling + Camelot
+                                    matched_pairs = self.reconciler.match_tables(
+                                        docling_tables, camelot_tables
+                                    )
+
+                                    logger.info(
+                                        f"Matched {len(matched_pairs)} of {len(docling_tables)} docling tables with Camelot"
+                                    )
+
+                                    # Create lookup for matched tables
+                                    matched_docling = {
+                                        id(d): c for d, c in matched_pairs
+                                    }
+                                    matched_camelot_ids = {
+                                        id(c) for _, c in matched_pairs
+                                    }
+
+                                    # Process ALL docling tables (with or without Camelot match)
+                                    dual_tables = []
+                                    for docling_table in docling_tables:
+                                        camelot_table = matched_docling.get(
+                                            id(docling_table)
+                                        )
+
+                                        if camelot_table:
+                                            # Matched pair - merge tables
+                                            dual_table = self.reconciler.merge_tables(
+                                                docling_table, camelot_table
+                                            )
+                                        else:
+                                            # No Camelot match - create dual table with only docling
+                                            dual_table = self.reconciler.merge_tables(
+                                                docling_table, None
+                                            )
+
+                                        dual_tables.append(dual_table)
+
+                                    # Find unmatched high-quality Camelot tables
+                                    unmatched_camelot = [
+                                        ct
+                                        for ct in camelot_tables
+                                        if id(ct) not in matched_camelot_ids
+                                        and ct.accuracy >= 70
+                                    ]
+
+                                    if unmatched_camelot:
+                                        logger.info(
+                                            f"Found {len(unmatched_camelot)} high-quality unmatched Camelot tables"
+                                        )
+                                        # Add Camelot-only tables
+                                        for camelot_table in unmatched_camelot:
+                                            dual_table = self.reconciler.merge_tables(
+                                                None, camelot_table
+                                            )
+                                            dual_tables.append(dual_table)
+
+                                    # Sort dual tables by page number
+                                    def get_page_number(dt):
+                                        """Extract page number from dual extraction table."""
+                                        if (
+                                            dt.camelot_quality
+                                            and "page" in dt.camelot_quality
+                                        ):
+                                            return dt.camelot_quality["page"]
+                                        if dt.docling_table and hasattr(
+                                            dt.docling_table, "page_number"
+                                        ):
+                                            page_num = dt.docling_table.page_number
+                                            if page_num is not None:
+                                                return page_num
+                                        return 999
+
+                                    dual_tables.sort(key=get_page_number)
+
+                                    # Store dual extraction results
+                                    result.dual_extraction_tables = dual_tables
+                                    result.camelot_enabled = True
+                                    result.tables = [
+                                        dt.reconciled_table for dt in dual_tables
+                                    ]
+                                    result.tables_extracted = len(result.tables)
+
+                                    # Calculate statistics
+                                    matched_count = len(matched_pairs)
+                                    docling_only = len(docling_tables) - matched_count
+                                    camelot_only = len(unmatched_camelot)
+
+                                    if matched_count > 0:
+                                        avg_agreement = (
+                                            sum(
+                                                dt.reconciliation_metadata.agreement_rate
+                                                for dt in dual_tables
+                                                if dt.reconciliation_metadata.cells_total
+                                                > 0
+                                            )
+                                            / matched_count
+                                        )
+                                        agreement_str = (
+                                            f"{avg_agreement:.1%} avg agreement"
+                                        )
+                                    else:
+                                        agreement_str = "no matches"
+
+                                    logger.info(
+                                        f"Dual extraction complete: {len(dual_tables)} total tables "
+                                        f"({matched_count} matched, {docling_only} docling-only, "
+                                        f"{camelot_only} camelot-only, {agreement_str})"
+                                    )
+                                else:
+                                    # Camelot-only mode: no reconciliation needed
+                                    dual_tables = []
+                                    for camelot_table in camelot_tables:
+                                        if camelot_table.accuracy >= 70:
+                                            dual_table = self.reconciler.merge_tables(
+                                                None, camelot_table
+                                            )
+                                            dual_tables.append(dual_table)
+
+                                    # Sort by page number
+                                    dual_tables.sort(
+                                        key=lambda dt: dt.camelot_quality.get(
+                                            "page", 999
+                                        )
+                                    )
+
+                                    # Store Camelot-only results
+                                    result.dual_extraction_tables = dual_tables
+                                    result.camelot_enabled = True
+                                    result.tables = [
+                                        dt.reconciled_table for dt in dual_tables
+                                    ]
+                                    result.tables_extracted = len(result.tables)
+
+                                    logger.info(
+                                        f"Camelot-only extraction: {len(dual_tables)} tables extracted"
+                                    )
+                            else:
+                                logger.info("Camelot did not find any tables")
+                                if not docling_tables:
+                                    result.tables = []
+                                    result.tables_extracted = 0
+
+                        except Exception as e:
+                            logger.error(
+                                f"Camelot extraction failed: {e}", exc_info=True
+                            )
+                            if docling_tables:
+                                logger.warning(
+                                    "Falling back to docling-only extraction"
+                                )
+                                result.tables = docling_tables
+                                result.tables_extracted = len(docling_tables)
+                            else:
+                                logger.error(
+                                    "No fallback available - both Camelot and docling failed"
+                                )
+                                result.tables = []
+                                result.tables_extracted = 0
+                    else:
+                        logger.info(
+                            "PDF appears to be scanned/image-based. "
+                            "Skipping Camelot extraction (text-based PDFs only)"
+                        )
+                        # Use docling tables if available
+                        if docling_tables:
+                            result.tables = docling_tables
+                            result.tables_extracted = len(docling_tables)
+                else:
+                    # Camelot disabled - use docling tables if available
+                    if docling_tables:
+                        result.tables = docling_tables
+                        result.tables_extracted = len(docling_tables)
+                        logger.info(
+                            f"Using docling tables only: {len(docling_tables)} tables"
+                        )
+                    else:
+                        result.tables = []
+                        result.tables_extracted = 0
+                        logger.warning("No table extraction method enabled")
 
             # Step 4: Extract figures
             if self.config.extract_figures:
@@ -183,6 +453,40 @@ class PaperExtractor:
                     conversion_result.document, paper_output_dir, paper_path.stem
                 )
                 result.figures_extracted = len(result.figures)
+
+                # Fix markdown references: replace hashed image names with sequential figure_*.png
+                figures_dir = paper_output_dir / "figures"
+                if figures_dir.exists() and markdown_path.exists():
+                    # Get all image_*.png files sorted by name
+                    hashed_images = sorted(figures_dir.glob("image_*.png"))
+
+                    if hashed_images:
+                        # Read markdown content
+                        markdown_content = markdown_path.read_text()
+
+                        # Replace each hashed image reference with sequential figure number
+                        for idx, img_file in enumerate(hashed_images, start=1):
+                            old_ref = f"figures/{img_file.name}"
+                            new_ref = f"figures/figure_{idx}.png"
+                            markdown_content = markdown_content.replace(
+                                old_ref, new_ref
+                            )
+                            logger.debug(
+                                f"Replaced {img_file.name} with figure_{idx}.png in markdown"
+                            )
+
+                        # Write updated markdown
+                        markdown_path.write_text(markdown_content)
+
+                        # Now remove the hashed images
+                        for img_file in hashed_images:
+                            try:
+                                img_file.unlink()
+                                logger.debug(
+                                    f"Removed duplicate image: {img_file.name}"
+                                )
+                            except Exception as e:
+                                logger.warning(f"Could not remove {img_file.name}: {e}")
 
                 logger.info(f"Found {len(result.figures)} figures")
 

@@ -163,7 +163,10 @@ cython_debug/
 
 .ruff_cache/
 _archive/
-papers/
+# papers/
+papers/*.pdf
+papers/*.docx
+papers/*.doc
 output/
 # Data files
 data/**/*.dta

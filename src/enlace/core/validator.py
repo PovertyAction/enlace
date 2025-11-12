@@ -103,7 +103,17 @@ class ExtractionValidator:
         if isinstance(extraction, Path):
             if not extraction.exists():
                 raise FileNotFoundError(f"Extraction file not found: {extraction}")
-            extraction = ExtractionResult.parse_file(extraction)
+
+            # If path is a directory, look for extraction.json inside it
+            if extraction.is_dir():
+                extraction_file = extraction / "extraction.json"
+                if not extraction_file.exists():
+                    raise FileNotFoundError(
+                        f"extraction.json not found in directory: {extraction}"
+                    )
+                extraction = ExtractionResult.parse_file(extraction_file)
+            else:
+                extraction = ExtractionResult.parse_file(extraction)
 
         # Get checks to run (custom_checks override level)
         checks_to_run = self.config.get_checks_for_level(level, custom_checks)

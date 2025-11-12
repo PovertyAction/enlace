@@ -142,6 +142,69 @@ class ExtractionConfig(BaseSettings):
         description="LLM model for semantic extraction",
     )
 
+    # Table extraction settings
+    enable_camelot: bool = Field(
+        default=True,
+        description="Enable Camelot table extraction (default: True)",
+    )
+    enable_docling_tables: bool = Field(
+        default=False,
+        description="Enable docling table extraction and reconciliation (default: False, Camelot-only)",
+    )
+    camelot_fallback_only: bool = Field(
+        default=True,
+        description="Only use Camelot when docling quality is low (selective mode)",
+    )
+    camelot_quality_threshold: float = Field(
+        default=70.0,
+        ge=0.0,
+        le=100.0,
+        description="Minimum Camelot accuracy score to trust (0-100)",
+    )
+    camelot_min_table_size: int = Field(
+        default=3,
+        ge=2,
+        le=10,
+        description="Minimum table size (rows and columns) to consider valid (default: 3x3)",
+    )
+    camelot_min_content_density: float = Field(
+        default=0.35,
+        ge=0.1,
+        le=1.0,
+        description="Minimum proportion of filled cells (0.1-1.0, default: 0.35)",
+    )
+    camelot_lattice_line_scale: int = Field(
+        default=40,
+        ge=1,
+        le=150,
+        description="Camelot lattice line detection scale factor (1-150)",
+    )
+    camelot_stream_edge_tol: int = Field(
+        default=50,
+        ge=1,
+        description="Camelot stream mode text edge tolerance",
+    )
+    reconciliation_strategy: str = Field(
+        default="camelot_primary",
+        description="Table reconciliation strategy: camelot_primary (default), confidence_based, prefer_camelot, or prefer_docling",
+    )
+    reconciliation_match_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity score to match tables between extractors (0-1)",
+    )
+
+    # DOCX/DOC conversion
+    libreoffice_path: str | None = Field(
+        None,
+        description="Custom path to LibreOffice executable for DOCX conversion",
+    )
+    keep_converted_pdfs: bool = Field(
+        default=False,
+        description="Keep converted PDFs from DOCX/DOC files",
+    )
+
     # Output
     output_format: str = Field(
         default="json", description="Output format: json, csv, or both"

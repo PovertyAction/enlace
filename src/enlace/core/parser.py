@@ -705,19 +705,32 @@ class TableParser:
                 coef = RegressionCoefficient(variable_name=var_name)
 
                 # Extract coefficient value and significance
-                coef_match = re.match(r"([-+]?\d*\.?\d+)\s*(\*{0,3})", coef_text)
-                if coef_match:
-                    coef.coefficient = float(coef_match.group(1))
+                # First try to match coefficient with SE in same cell: "0.014 (0.040)"
+                full_match = re.match(
+                    r"([-+]?\d*\.?\d+)\s*(\*{0,3})\s*[\(\[]([+-]?\d*\.?\d+)[\)\]]",
+                    coef_text,
+                )
+                if full_match:
+                    coef.coefficient = float(full_match.group(1))
                     coef.significance = (
-                        coef_match.group(2) if coef_match.group(2) else None
+                        full_match.group(2) if full_match.group(2) else None
                     )
+                    coef.std_error = float(full_match.group(3))
+                else:
+                    # Try coefficient only (SE may be on next row)
+                    coef_match = re.match(r"([-+]?\d*\.?\d+)\s*(\*{0,3})", coef_text)
+                    if coef_match:
+                        coef.coefficient = float(coef_match.group(1))
+                        coef.significance = (
+                            coef_match.group(2) if coef_match.group(2) else None
+                        )
 
-                # Extract standard error
-                if has_se_row and col_idx < len(rows[i + 1]):
-                    se_text = rows[i + 1][col_idx].strip()
-                    se_match = re.search(r"\(([-+]?\d*\.?\d+)\)", se_text)
-                    if se_match:
-                        coef.std_error = float(se_match.group(1))
+                    # Extract standard error from next row if not in same cell
+                    if has_se_row and col_idx < len(rows[i + 1]):
+                        se_text = rows[i + 1][col_idx].strip()
+                        se_match = re.search(r"[\(\[]([+-]?\d*\.?\d+)[\)\]]", se_text)
+                        if se_match:
+                            coef.std_error = float(se_match.group(1))
 
                 model.coefficients.append(coef)
 
@@ -1031,10 +1044,10 @@ class TableParser:
                             if mean_match.group(2):
                                 balance_stat.significance = mean_match.group(2)
 
-                    # Extract SD
+                    # Extract SD (handles both parentheses and brackets)
                     if has_sd_row and col_idx < len(rows[i + 1]):
                         sd_text = rows[i + 1][col_idx].strip()
-                        sd_match = re.search(r"\(([-+]?\d*\.?\d+)\)", sd_text)
+                        sd_match = re.search(r"[\(\[]([+-]?\d*\.?\d+)[\)\]]", sd_text)
                         if sd_match:
                             sd_field = field_info["type"].replace("mean", "sd")
                             setattr(balance_stat, sd_field, sd_match.group(1))

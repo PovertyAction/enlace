@@ -19,11 +19,13 @@ from pathlib import Path
 from enlace.core.extractor import PaperExtractor
 from enlace.core.config import ExtractionConfig
 
-# Configure extraction
+# Configure extraction (Camelot-only by default)
 config = ExtractionConfig(
+    enable_camelot=True,           # Default: True
+    enable_docling_tables=False,   # Default: False (Camelot-only mode)
     enable_ocr=True,
     enable_augmentation=False,
-    output_format="json"
+    output_format="csv"
 )
 
 # Extract from paper
@@ -84,7 +86,12 @@ from pathlib import Path
 from enlace.core.extractor import PaperExtractor
 from enlace.core.config import ExtractionConfig
 
-config = ExtractionConfig(enable_ocr=True)
+# Camelot-only extraction (default)
+config = ExtractionConfig(
+    enable_camelot=True,           # Default: True
+    enable_docling_tables=False,   # Default: False
+    enable_ocr=True
+)
 extractor = PaperExtractor(config)
 
 try:
@@ -306,18 +313,33 @@ Configuration for paper extraction with priority loading.
 
 ```python
 ExtractionConfig(
+    # Table extraction settings
+    enable_camelot: bool = True,                        # NEW: Camelot extraction (default: True)
+    enable_docling_tables: bool = False,                # NEW: Docling table extraction (default: False, Camelot-only)
+    camelot_fallback_only: bool = True,                 # Only use Camelot when docling quality is low
+    reconciliation_strategy: str = "camelot_primary",   # NEW: Default reconciliation strategy
+
+    # OCR settings
     enable_ocr: bool = False,
     ocr_backend: str = "auto",
     ocr_confidence_threshold: float = 0.8,
     hybrid_ocr_enabled: bool = True,
+
+    # Feature flags
     enable_augmentation: bool = False,
     extract_figures: bool = True,
     extract_tables: bool = True,
     extract_metadata: bool = True,
+
+    # Models
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
     llm_model: str = "claude-4-5-haiku",
+
+    # Output settings
     output_format: str = "json",
     output_dir: Path = Path("output"),
+
+    # Processing settings
     batch_size: int = 10,
     max_workers: int = 4,
     verbose: bool = False,
@@ -350,20 +372,31 @@ Load configuration with priority: defaults < file < env < CLI args.
 from pathlib import Path
 from enlace.core.config import ExtractionConfig
 
-# Load from config file
+# Camelot-only mode (default)
 config = ExtractionConfig.load_config(
-    config_file=Path(".enlace.toml")
+    enable_camelot=True,           # Default: True
+    enable_docling_tables=False    # Default: False
 )
 
-# Override with CLI args
+# Dual extraction mode (with docling + Camelot reconciliation)
+config = ExtractionConfig.load_config(
+    enable_camelot=True,
+    enable_docling_tables=True,
+    reconciliation_strategy="camelot_primary"
+)
+
+# Load from config file with overrides
 config = ExtractionConfig.load_config(
     config_file=Path(".enlace.toml"),
     enable_ocr=True,
     ocr_backend="easyocr",
-    output_dir=Path("results")
+    output_dir=Path("results"),
+    enable_docling_tables=True     # Enable dual extraction
 )
 
 # Environment variables automatically loaded (ENLACE_* prefix)
+# ENLACE_ENABLE_CAMELOT=true
+# ENLACE_ENABLE_DOCLING_TABLES=false
 # ENLACE_ENABLE_OCR=true
 # ENLACE_LLM_MODEL=claude-4-5-haiku
 ```
@@ -624,6 +657,68 @@ except Exception as e:
 ```
 
 ## Advanced Usage
+
+### Camelot-only vs Dual Extraction
+
+**Camelot-only mode (default, faster, simpler):**
+
+```python
+from pathlib import Path
+from enlace.core.extractor import PaperExtractor
+from enlace.core.config import ExtractionConfig
+
+# Camelot-only: no docling overhead, no reconciliation
+config = ExtractionConfig(
+    enable_camelot=True,           # Default: True
+    enable_docling_tables=False,   # Default: False
+    output_format="csv"
+)
+
+extractor = PaperExtractor(config)
+result = extractor.extract(Path("paper.pdf"))
+
+# Tables come directly from Camelot
+print(f"Extracted {len(result.tables)} Camelot tables")
+
+# Output: tables/camelot/ directory with CSV files
+result.save(Path("output"), format="csv")
+```
+
+**Dual extraction mode (with docling + Camelot reconciliation):**
+
+```python
+from pathlib import Path
+from enlace.core.extractor import PaperExtractor
+from enlace.core.config import ExtractionConfig
+
+# Dual extraction: runs both docling and Camelot, then reconciles
+config = ExtractionConfig(
+    enable_camelot=True,
+    enable_docling_tables=True,              # Enable docling extraction
+    reconciliation_strategy="camelot_primary", # Default: prefer Camelot data
+    output_format="both"
+)
+
+extractor = PaperExtractor(config)
+result = extractor.extract(Path("paper.pdf"))
+
+# Dual extraction tables contain all three versions
+if result.dual_extraction_tables:
+    for dual_table in result.dual_extraction_tables:
+        print(f"Docling table: {dual_table.docling_table.title}")
+        print(f"Camelot quality: {dual_table.camelot_quality}")
+        print(f"Reconciled table: {dual_table.reconciled_table.title}")
+
+# Output: tables/docling/, tables/camelot/, tables/reconciled/
+result.save(Path("output"), format="both")
+```
+
+**Comparison:**
+
+| Mode | Speed | Accuracy | Output | Use Case |
+|------|-------|----------|--------|----------|
+| **Camelot-only** | Fast | High for numeric data | `tables/camelot/` | Production use, clean PDFs |
+| **Dual extraction** | Slower | Best-of-both | `tables/{docling,camelot,reconciled}/` | Research, quality comparison |
 
 ### Custom Validation Checks
 
