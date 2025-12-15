@@ -82,14 +82,14 @@ process_paper(..., force_reextract=False)
 
 **Before**:
 
-```
+```text
 **authNum**: Number of authors
 Type: integer
 ```
 
 **After**:
 
-```
+```text
 **authNum**: Number of authors
    Hint: Count all authors listed in the paper
    Type: integer (REQUIRED)
@@ -126,7 +126,7 @@ Categories:
 
 **Example Output**:
 
-```
+```text
 ╭───────────────────────────────────────╮
 │    Overall Statistics                 │
 ├─────────────────────────┬─────────────┤
@@ -233,7 +233,7 @@ The validator checks field constraints defined in the form:
 
 ### Individual JSON Files
 
-```
+```text
 output/form_extractions/
 ├── Paper_ID10008_extraction.json
 ├── Paper_ID10005_extraction.json
@@ -261,14 +261,14 @@ Each file contains:
 
 **Clear Labels**: Make questions specific and unambiguous
 
-```
+```text
 ❌ "What is the sample?"
 ✅ "Total number of households in the study sample"
 ```
 
 **Use Hints**: Provide clarification in the hint field
 
-```
+```text
 Field: authNum
 Label: Number of authors
 Hint: Count all authors listed in the paper header, including those in footnotes
@@ -276,7 +276,7 @@ Hint: Count all authors listed in the paper header, including those in footnotes
 
 **Specify Constraints**: Add validation rules
 
-```
+```text
 Field: pubYear
 Constraint: >= 1900 AND <= 2025
 ```
@@ -298,7 +298,7 @@ Constraint: >= 1900 AND <= 2025
 
 **Check Completion Rates**: Focus on fields with low completion
 
-```
+```text
 Fields with <50% completion:
   • loan_eligibility_criteria: 33.3%
   • baseline_survey_date: 16.7%

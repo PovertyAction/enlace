@@ -274,7 +274,7 @@ Forms are Excel files with columns defining your data fields:
 
 **Example form row:**
 
-```
+```yaml
 type: integer
 name: sample_size
 label: Total number of participants in study
@@ -295,7 +295,7 @@ uv run python scripts/extract_from_form_improved.py
 
 #### Output Structure
 
-```
+```text
 output/form_extractions/
 ├── stage1/                          # First form (e.g., basic study info)
 │   ├── Paper_001_extraction.json   # Individual extractions

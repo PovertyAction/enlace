@@ -65,6 +65,13 @@ class FormField:
     """Represents a single form field with metadata."""
 
     def __init__(self, row: pd.Series):
+        """Initialize form field from Excel row.
+
+        Args:
+            row: Pandas Series containing field definition with columns:
+                 name, label, rando (type), hint, required, constraint.
+
+        """
         self.name = row["name"]
         self.label = row["label"]
         self.field_type = str(row["rando"])
@@ -99,6 +106,12 @@ class ExtractionValidator:
     """Validates extracted data against form schema."""
 
     def __init__(self, fields: list[FormField]):
+        """Initialize validator with form field definitions.
+
+        Args:
+            fields: List of FormField objects defining the schema.
+
+        """
         self.fields = {f.name: f for f in fields}
 
     def validate(self, data: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:

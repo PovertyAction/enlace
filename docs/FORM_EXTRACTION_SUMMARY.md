@@ -93,7 +93,7 @@ The script automatically adapts to different form structures and column naming c
 
 1. **Place your forms** (Excel files with ODK-style field definitions):
 
-   ```
+   ```text
    data/forms/
        ├── your_form_stage1.xlsx
        ├── your_form_stage2.xlsx
@@ -102,7 +102,7 @@ The script automatically adapts to different form structures and column naming c
 
 2. **Place your papers**:
 
-   ```
+   ```text
    papers/
        ├── Paper_001.pdf
        ├── Paper_002.pdf
@@ -117,7 +117,7 @@ The script automatically adapts to different form structures and column naming c
 
 4. **Get results** (separate output per form):
 
-   ```
+   ```text
    output/form_extractions/
        ├── stage1/
        │   ├── Paper_001_extraction.json
@@ -171,7 +171,7 @@ Based on typical usage patterns:
 
 ### Extraction Progress
 
-```
+```text
 Processing papers... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 6/6
 Processing Paper_ID10008.pdf
 OK - Paper_ID10008.pdf: extracted successfully
@@ -180,7 +180,7 @@ WARNING - Paper_ID10005.pdf: 2 warnings
 
 ### Extraction Report
 
-```
+```text
 ╭──────────────────────────────────────────╮
 │         Overall Statistics               │
 ├────────────────────┬─────────────────────┤
@@ -235,7 +235,7 @@ Fields with <50% completion:
 
 ### How It Works
 
-```
+```text
 ┌──────────────────────────────────────────────────┐
 │  1. Auto-discover all Excel files in ./forms/    │
 │     - Identifies field type column automatically │
