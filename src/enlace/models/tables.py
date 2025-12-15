@@ -346,13 +346,18 @@ class BalanceStatistic(BaseModel):
     )
     @classmethod
     def parse_float(cls, v):
-        """Parse float values."""
+        """Parse float values.
+
+        Note: Parentheses are removed but NOT treated as negatives.
+        They typically represent standard errors, not negative values.
+        """
         if v is None or v == "":
             return None
         if isinstance(v, int | float):
             return float(v)
         try:
             v_str = str(v).strip().replace(",", "").replace("%", "").replace("*", "")
+            # Remove parentheses but don't treat as negative
             v_str = re.sub(r"[()]", "", v_str)
             return float(v_str)
         except (ValueError, AttributeError):

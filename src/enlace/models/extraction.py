@@ -151,6 +151,17 @@ class ExtractionResult(BaseModel):
 
         # Save each table type to CSV
         for idx, table in enumerate(self.tables):
+            table_num = idx + 1
+
+            # Get table title for filename
+            table_title = table.title or table.table_number or f"table_{table_num}"
+            safe_filename = self._sanitize_filename(table_title)
+            if not safe_filename:
+                safe_filename = f"table_{table_num}"
+            else:
+                # Add number prefix to maintain order
+                safe_filename = f"{table_num}_{safe_filename}"
+
             if isinstance(table, RegressionTable):
                 # Flatten regression table to DataFrame
                 rows = []
@@ -170,7 +181,7 @@ class ExtractionResult(BaseModel):
                         )
                 if rows:
                     df = pd.DataFrame(rows)
-                    csv_path = tables_dir / f"regression_table_{idx + 1}.csv"
+                    csv_path = tables_dir / f"{safe_filename}.csv"
                     df.to_csv(csv_path, index=False)
 
             elif isinstance(table, SummaryStatisticsTable):
@@ -180,7 +191,7 @@ class ExtractionResult(BaseModel):
                     rows.append(stat.model_dump())
                 if rows:
                     df = pd.DataFrame(rows)
-                    csv_path = tables_dir / f"summary_stats_table_{idx + 1}.csv"
+                    csv_path = tables_dir / f"{safe_filename}.csv"
                     df.to_csv(csv_path, index=False)
 
             elif isinstance(table, BalanceTable):
@@ -190,8 +201,38 @@ class ExtractionResult(BaseModel):
                     rows.append(comparison.model_dump())
                 if rows:
                     df = pd.DataFrame(rows)
-                    csv_path = tables_dir / f"balance_table_{idx + 1}.csv"
+                    csv_path = tables_dir / f"{safe_filename}.csv"
                     df.to_csv(csv_path, index=False)
+
+    def _sanitize_filename(self, title: str, max_length: int = 100) -> str:
+        """Convert table title to safe filename.
+
+        Args:
+            title: Table title or caption
+            max_length: Maximum filename length
+
+        Returns:
+            Sanitized filename string
+
+        """
+        import re
+
+        if not title:
+            return ""
+
+        # Remove or replace unsafe characters
+        safe_title = re.sub(r'[<>:"/\\|?*]', "", title)
+        # Replace spaces and special chars with underscores
+        safe_title = re.sub(r"[\s\-]+", "_", safe_title)
+        # Remove multiple underscores
+        safe_title = re.sub(r"_+", "_", safe_title)
+        # Remove leading/trailing underscores
+        safe_title = safe_title.strip("_")
+        # Truncate if too long
+        if len(safe_title) > max_length:
+            safe_title = safe_title[:max_length].rstrip("_")
+
+        return safe_title.lower()
 
     def _save_dual_extraction(self, output_dir: Path, format: str = "json") -> None:
         """Save dual extraction tables (docling + Camelot + reconciled).
@@ -226,19 +267,66 @@ class ExtractionResult(BaseModel):
         for idx, dual_table in enumerate(self.dual_extraction_tables):
             table_num = idx + 1
 
-            # Save docling table
+            # Get table title for filename
+            # In raw mode, table_id contains the enhanced name
+            if dual_table.table_id and not dual_table.table_id.startswith("table_"):
+                # table_id was enhanced with caption-based name
+                safe_filename = dual_table.table_id
+            elif dual_table.reconciled_table:
+                # Structured mode - get from table object
+                table_title = (
+                    getattr(dual_table.reconciled_table, "title", None)
+                    or getattr(dual_table.reconciled_table, "table_number", None)
+                    or f"table_{table_num}"
+                )
+                safe_filename = self._sanitize_filename(table_title)
+                if not safe_filename:
+                    safe_filename = f"table_{table_num}"
+                else:
+                    # Add number prefix to maintain order
+                    safe_filename = f"{table_num}_{safe_filename}"
+            else:
+                # Fallback
+                safe_filename = f"{table_num}_{dual_table.table_id}"
+
+            # Save docling table (structured or raw)
             if format in ("json", "both"):
-                docling_path = docling_dir / f"table_{table_num}.json"
-                with open(docling_path, "w") as f:
-                    json.dump(
-                        dual_table.docling_table.model_dump(), f, indent=2, default=str
-                    )
+                if dual_table.docling_table:
+                    # Structured table
+                    docling_path = docling_dir / f"{safe_filename}.json"
+                    with open(docling_path, "w") as f:
+                        json.dump(
+                            dual_table.docling_table.model_dump(),
+                            f,
+                            indent=2,
+                            default=str,
+                        )
+                elif dual_table.docling_dataframe:
+                    # Raw DataFrame
+                    docling_path = docling_dir / f"{safe_filename}.json"
+                    with open(docling_path, "w") as f:
+                        json.dump(
+                            dual_table.docling_dataframe,
+                            f,
+                            indent=2,
+                            default=str,
+                        )
 
             if format in ("csv", "both"):
-                # Convert docling table to CSV
-                docling_df = self._table_to_dataframe(dual_table.docling_table)
-                if docling_df is not None:
-                    docling_csv_path = docling_dir / f"table_{table_num}.csv"
+                # Convert docling table/dataframe to CSV
+                if dual_table.docling_table:
+                    docling_df = self._table_to_dataframe(dual_table.docling_table)
+                    if docling_df is not None:
+                        docling_csv_path = docling_dir / f"{safe_filename}.csv"
+                        docling_df.to_csv(docling_csv_path, index=False)
+                elif dual_table.docling_dataframe:
+                    # Raw DataFrame - reconstruct and save
+                    docling_df = (
+                        pd.DataFrame.from_records(dual_table.docling_dataframe)
+                        if isinstance(dual_table.docling_dataframe, list)
+                        else dual_table.docling_dataframe
+                    )
+                    docling_csv_path = docling_dir / f"{safe_filename}.csv"
                     docling_df.to_csv(docling_csv_path, index=False)
 
             # Save Camelot data
@@ -246,12 +334,12 @@ class ExtractionResult(BaseModel):
                 camelot_df = dual_table.get_camelot_dataframe()
                 if camelot_df is not None:
                     if format in ("csv", "both"):
-                        camelot_path = camelot_dir / f"table_{table_num}.csv"
+                        camelot_path = camelot_dir / f"{safe_filename}.csv"
                         camelot_df.to_csv(camelot_path, index=False)
 
                     if format in ("json", "both"):
                         # Convert DataFrame to JSON
-                        camelot_json_path = camelot_dir / f"table_{table_num}.json"
+                        camelot_json_path = camelot_dir / f"{safe_filename}.json"
                         with open(camelot_json_path, "w") as f:
                             json.dump(
                                 camelot_df.to_dict(orient="records"),
@@ -260,22 +348,44 @@ class ExtractionResult(BaseModel):
                                 default=str,
                             )
 
-            # Save reconciled table
+            # Save reconciled table (structured or raw)
             if format in ("json", "both"):
-                reconciled_path = reconciled_dir / f"table_{table_num}.json"
-                with open(reconciled_path, "w") as f:
-                    json.dump(
-                        dual_table.reconciled_table.model_dump(),
-                        f,
-                        indent=2,
-                        default=str,
-                    )
+                if dual_table.reconciled_table:
+                    reconciled_path = reconciled_dir / f"{safe_filename}.json"
+                    with open(reconciled_path, "w") as f:
+                        json.dump(
+                            dual_table.reconciled_table.model_dump(),
+                            f,
+                            indent=2,
+                            default=str,
+                        )
+                elif dual_table.reconciled_dataframe:
+                    reconciled_path = reconciled_dir / f"{safe_filename}.json"
+                    with open(reconciled_path, "w") as f:
+                        json.dump(
+                            dual_table.reconciled_dataframe,
+                            f,
+                            indent=2,
+                            default=str,
+                        )
 
             if format in ("csv", "both"):
-                # Convert reconciled table to CSV
-                reconciled_df = self._table_to_dataframe(dual_table.reconciled_table)
-                if reconciled_df is not None:
-                    reconciled_csv_path = reconciled_dir / f"table_{table_num}.csv"
+                # Convert reconciled table/dataframe to CSV
+                if dual_table.reconciled_table:
+                    reconciled_df = self._table_to_dataframe(
+                        dual_table.reconciled_table
+                    )
+                    if reconciled_df is not None:
+                        reconciled_csv_path = reconciled_dir / f"{safe_filename}.csv"
+                        reconciled_df.to_csv(reconciled_csv_path, index=False)
+                elif dual_table.reconciled_dataframe:
+                    # Raw DataFrame - reconstruct and save
+                    reconciled_df = (
+                        pd.DataFrame.from_records(dual_table.reconciled_dataframe)
+                        if isinstance(dual_table.reconciled_dataframe, list)
+                        else dual_table.reconciled_dataframe
+                    )
+                    reconciled_csv_path = reconciled_dir / f"{safe_filename}.csv"
                     reconciled_df.to_csv(reconciled_csv_path, index=False)
 
             # Add to report

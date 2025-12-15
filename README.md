@@ -12,6 +12,7 @@ enlace is a Python package for extracting structured data from social science re
 ### Key Features
 
 - **Automated Table Extraction** - Regression tables, summary statistics, balance tables
+- **Form-Based Data Extraction** - Extract structured data using custom Excel form definitions (project-agnostic)
 - **Figure Extraction** - Extract and save figures with vision model annotations
 - **Vision Model Annotations** - Local AI-powered image descriptions
 - **Metadata Extraction** - Title, authors, institution, journal, year, DOI, citations, methodology
@@ -89,8 +90,11 @@ enlace validate output/paper/extraction.json --fail-on-issues
 Using the outputs of the extract step, you can create AI-generated summaries of research papers.
 
 ```bash
-# Basic summary (requires ANTHROPIC_API_KEY)
-export ANTHROPIC_API_KEY=your_api_key
+# Set up API key (first time only - see .env.example)
+cp .env.example .env
+# Edit .env and add your ANTHROPIC_API_KEY
+
+# Basic summary
 enlace summarize output/paper/extraction.json
 
 # Generate markdown summary
@@ -102,6 +106,38 @@ enlace summarize output/paper -o summaries/
 # Enhanced summary with web search
 enlace summarize output/paper --web-search
 ```
+
+### Form-Based Data Extraction (Project-Agnostic)
+
+Extract structured data from papers according to custom form definitions. Perfect for systematic reviews, meta-analysis, and data harmonization projects.
+
+```bash
+# Set up API key (first time only)
+cp .env.example .env
+# Edit .env and add your ANTHROPIC_API_KEY
+
+# Place your Excel form definitions in data/forms/
+# Place your papers in papers/
+# Run extraction - automatically discovers all forms
+uv run python scripts/extract_from_form_improved.py
+
+# Results saved to output/form_extractions/{form_id}/
+# - Individual JSON files per paper
+# - Combined Excel file per form
+# - Detailed completion statistics
+```
+
+**Key Features:**
+
+- **Auto-discovery** - Automatically finds all Excel forms in `data/forms/`
+- **Flexible schemas** - Adapts to different column names (`rando`, `deliver`, `type`)
+- **Multiple forms** - Process multiple forms in one run, separate outputs per form
+- **Type validation** - Automatic type coercion (text, integer, date, select_one, select_multiple)
+- **Incremental processing** - Skips already-extracted papers to save API costs
+- **Error recovery** - Continues processing even if individual papers fail
+- **Comprehensive reporting** - Field completion rates, validation warnings, statistics
+
+See [Form Extraction Guide](docs/FORM_EXTRACTION_SUMMARY.md) for detailed documentation.
 
 ### Batch Processing
 
@@ -211,6 +247,101 @@ enlace extract paper.pdf --ocr easyocr
 enlace extract paper.pdf --ocr auto --ocr-confidence 0.9
 ```
 
+### Form-Based Structured Data Extraction
+
+**Project-Agnostic System** for extracting structured data from papers according to custom form definitions. Ideal for systematic reviews, meta-analysis projects, and data harmonization across studies.
+
+#### How It Works
+
+1. **Define your data schema** - Create Excel forms with field definitions (supports ODK/KoBoToolbox format)
+2. **Place forms in `data/forms/`** - Script automatically discovers all Excel files
+3. **Add papers to `papers/`** - PDF research papers to extract from
+4. **Run extraction** - Processes all papers against all forms automatically
+5. **Get structured output** - JSON + Excel files with completion statistics
+
+#### Form Structure
+
+Forms are Excel files with columns defining your data fields:
+
+| Column | Description | Values |
+|--------|-------------|--------|
+| `type` / `rando` / `deliver` | Field type | `text`, `integer`, `date`, `select_one`, `select_multiple` |
+| `name` | Field identifier | `study_id`, `sample_size`, `treatment_effect` |
+| `label` | Human-readable label | "Study Identifier", "Total Sample Size" |
+| `hint` | Extraction guidance (optional) | "Look in methods section" |
+| `required` | Required field (optional) | `yes` / `no` |
+| `constraint` | Validation rule (optional) | Pattern or value constraints |
+
+**Example form row:**
+
+```
+type: integer
+name: sample_size
+label: Total number of participants in study
+hint: Check Table 1 or methods section
+required: yes
+```
+
+#### Running Extraction
+
+```bash
+# Set up API key (first time only)
+cp .env.example .env
+# Edit .env and add your ANTHROPIC_API_KEY
+
+# Run extraction (auto-discovers forms)
+uv run python scripts/extract_from_form_improved.py
+```
+
+#### Output Structure
+
+```
+output/form_extractions/
+├── stage1/                          # First form (e.g., basic study info)
+│   ├── Paper_001_extraction.json   # Individual extractions
+│   ├── Paper_002_extraction.json
+│   ├── ...
+│   └── stage1_all_extractions.xlsx # Combined data
+├── stage2/                          # Second form (e.g., detailed outcomes)
+│   ├── Paper_001_extraction.json
+│   ├── Paper_002_extraction.json
+│   ├── ...
+│   └── stage2_all_extractions.xlsx
+└── ...
+```
+
+#### Features
+
+- **Auto-discovery** - Finds all forms automatically, no configuration needed
+- **Flexible column mapping** - Adapts to different form formats (`rando`, `deliver`, `type` columns)
+- **Multiple forms support** - Process multiple schemas in one run
+- **Type validation & coercion** - Automatic conversion to integers, dates, lists
+- **Incremental processing** - Skip already-extracted papers (saves API costs)
+- **Retry logic** - Automatic retry with exponential backoff for API failures
+- **Field categorization** - Intelligent grouping for better LLM prompting
+- **Completion tracking** - Per-field completion rates and statistics
+- **Validation warnings** - Missing required fields, type mismatches
+- **Error recovery** - Continues processing if individual papers fail
+
+#### Customization
+
+The extraction system is designed to work out-of-the-box, but can be customized:
+
+```python
+# Modify field categorization in scripts/extract_from_form_improved.py
+def categorize_fields(fields: list[FormField]) -> dict[str, list[FormField]]:
+    # Add custom categories or modify existing patterns
+    ...
+
+# Adjust validation rules
+class ExtractionValidator:
+    def validate(self, data: dict) -> tuple[dict, list[str]]:
+        # Add custom validation logic
+        ...
+```
+
+See [Form Extraction Documentation](docs/FORM_EXTRACTION_SUMMARY.md) for complete guide.
+
 ### Semantic Augmentation
 
 Enhance extractions with context from paper text using RAG:
@@ -222,11 +353,12 @@ Enhance extractions with context from paper text using RAG:
 - **Cross-Validation** - Detects OCR errors by comparing to paper text
 - **Confidence Scores** - Quality metrics for extracted information
 
-**Requirement:** Semantic augmentation requires `ANTHROPIC_API_KEY` environment variable. (Other remote models as well as local models are on the roadmap).
+**Requirement:** Semantic augmentation requires `ANTHROPIC_API_KEY` in `.env` file. (Other remote models as well as local models are on the roadmap).
 
 ```bash
-# Set API key
-export ANTHROPIC_API_KEY=your_api_key
+# Set up API key (first time only)
+cp .env.example .env
+# Edit .env and add your ANTHROPIC_API_KEY
 
 # Extract with augmentation
 enlace extract paper.pdf --augment
@@ -275,6 +407,9 @@ Generate structured, LLM-based summaries of research papers from extraction resu
 **Usage:**
 
 ```bash
+# Set up API key first (see .env.example)
+# cp .env.example .env and add your ANTHROPIC_API_KEY
+
 # Basic usage
 enlace summarize output/paper/extraction.json
 

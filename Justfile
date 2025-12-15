@@ -131,12 +131,17 @@ test-file f:
 
 [windows]
 pre-install:
-    winget install Casey.Just astral-sh.uv prefix-dev.pixi GitHub.cli
-    winget install BurntSushi.ripgrep.GNU eza-community.eza DuckDB.cli
-    winget install Posit.Quarto
-    winget install OpenJS.NodeJS
-    npm install -g markdownlint-cli2
-    pixi global install xan
+    @echo "Checking and installing required tools..."
+    @powershell -Command "if (!(Get-Command uv -ErrorAction SilentlyContinue)) { winget install --silent astral-sh.uv }"
+    @powershell -Command "if (!(Get-Command pixi -ErrorAction SilentlyContinue)) { winget install --silent prefix-dev.pixi }"
+    @powershell -Command "if (!(Get-Command gh -ErrorAction SilentlyContinue)) { winget install --silent GitHub.cli }"
+    @powershell -Command "if (!(Get-Command rg -ErrorAction SilentlyContinue)) { winget install --silent BurntSushi.ripgrep.GNU }"
+    @powershell -Command "if (!(Get-Command eza -ErrorAction SilentlyContinue)) { winget install --silent eza-community.eza }"
+    @powershell -Command "if (!(Get-Command duckdb -ErrorAction SilentlyContinue)) { winget install --silent DuckDB.cli }"
+    @powershell -Command "if (!(Get-Command quarto -ErrorAction SilentlyContinue)) { winget install --silent Posit.Quarto }"
+    @powershell -Command "if (!(Get-Command node -ErrorAction SilentlyContinue)) { winget install --silent OpenJS.NodeJS }"
+    @powershell -Command "if (!(Get-Command markdownlint-cli2 -ErrorAction SilentlyContinue)) { npm install -g markdownlint-cli2 }"
+    @powershell -Command "if (!(Get-Command xan -ErrorAction SilentlyContinue)) { pixi global install xan }"
 
 [linux]
 pre-install:
