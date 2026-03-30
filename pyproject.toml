@@ -113,5 +113,5 @@ ignore-words-list = "jupyter,ipa,hist,sav,master"
 skip = "uv.lock"
 
 [build-system]
-requires = ["uv_build>=0.9.8,<0.11.0"]
+requires = ["uv_build>=0.9.8,<0.12.0"]
 build-backend = "uv_build"
