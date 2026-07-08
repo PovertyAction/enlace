@@ -356,7 +356,7 @@ def extract_with_llm(prompt: str, api_key: str, max_retries: int = 3) -> dict[st
     for attempt in range(max_retries):
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=os.getenv("AUGMENTATION_LLM_MODEL"),
                 max_tokens=8000,
                 temperature=0,
                 messages=[{"role": "user", "content": prompt}],
