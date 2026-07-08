@@ -68,9 +68,9 @@ class CamelotExtractor:
         self,
         lattice_line_scale: int = 40,
         stream_edge_tol: int = 50,
-        quality_threshold: float = 70.0,
+        quality_threshold: float = 60.0,  # Lowered from 70 to catch more tables
         min_table_size: int = 3,
-        min_content_density: float = 0.35,
+        min_content_density: float = 0.30,  # Lowered from 0.35 for sparse tables
     ) -> None:
         """Initialize Camelot extractor.
 
@@ -81,7 +81,7 @@ class CamelotExtractor:
                 Increase to detect tables with vertically-spaced text.
             quality_threshold: Minimum accuracy score to accept (0-100).
             min_table_size: Minimum table dimensions (NxN, default 3x3).
-            min_content_density: Minimum filled cell ratio (0-1, default 0.35).
+            min_content_density: Minimum filled cell ratio (0-1, default 0.30).
 
         Raises:
             CamelotNotInstalledError: If Camelot is not installed.
@@ -194,21 +194,19 @@ class CamelotExtractor:
         """
         logger.debug(f"Trying {flavor} mode on {pdf_path.name}...")
 
-        # Build Camelot kwargs with conservative parameters to reduce false positives
+        # Build Camelot kwargs - more aggressive to capture all tables
         kwargs = {"flavor": flavor, "pages": pages}
 
         if flavor == "lattice":
             kwargs["line_scale"] = self.lattice_line_scale
-            # More conservative lattice detection
-            kwargs["iterations"] = (
-                0  # Disable morphological operations (cleaner detection)
-            )
+            # Enable morphological operations for better line detection
+            kwargs["iterations"] = 1  # Enable morphological operations
             kwargs["process_background"] = True  # Process background lines
         elif flavor == "stream":
             kwargs["edge_tol"] = self.stream_edge_tol
-            # Conservative stream mode - tighter text grouping
-            kwargs["row_tol"] = 2  # Stricter row alignment (default: 2)
-            kwargs["column_tol"] = 0  # Stricter column alignment (default: 0)
+            # More permissive stream mode to catch varied table formats
+            kwargs["row_tol"] = 3  # More permissive row alignment (was 2)
+            kwargs["column_tol"] = 2  # More permissive column alignment (was 0)
 
         # Run Camelot
         tables_list = self.camelot.read_pdf(str(pdf_path), **kwargs)

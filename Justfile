@@ -136,7 +136,7 @@ pre-install:
     winget install Posit.Quarto
     winget install OpenJS.NodeJS
     npm install -g markdownlint-cli2
-    pixi global install xan
+   
 
 [linux]
 pre-install:

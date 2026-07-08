@@ -227,24 +227,45 @@ class PaperExtractor:
 
                 # Extract docling tables only if explicitly enabled
                 docling_tables = []
+                docling_raw_tables = []  # Raw DataFrames for dual extraction
+
                 if self.config.enable_docling_tables:
-                    tables_dict = self.parser.parse_tables_from_document(
-                        conversion_result.document, paper_path.name
+                    # Check if we're in dual extraction mode (Camelot enabled)
+                    use_raw_extraction = (
+                        self.config.enable_camelot and self.camelot_extractor
                     )
 
-                    # Combine all table types
-                    docling_tables = (
-                        tables_dict["regression"]
-                        + tables_dict["summary"]
-                        + tables_dict["balance"]
-                    )
-                    logger.info(f"Found {len(docling_tables)} docling tables")
+                    if use_raw_extraction:
+                        # Use raw table extraction to preserve structure like Camelot
+                        logger.info(
+                            "Using raw table extraction (dual mode with Camelot)"
+                        )
+                        docling_raw_tables = self.parser.extract_raw_tables(
+                            conversion_result.document
+                        )
+                        logger.info(
+                            f"Found {len(docling_raw_tables)} raw docling tables"
+                        )
+                    else:
+                        # Use semantic parsing for structured extraction
+                        logger.info("Using semantic table parsing (Docling-only mode)")
+                        tables_dict = self.parser.parse_tables_from_document(
+                            conversion_result.document, paper_path.name
+                        )
+
+                        # Combine all table types
+                        docling_tables = (
+                            tables_dict["regression"]
+                            + tables_dict["summary"]
+                            + tables_dict["balance"]
+                        )
+                        logger.info(f"Found {len(docling_tables)} docling tables")
 
                 # Step 3.5: Camelot table extraction (default)
                 if self.config.enable_camelot and self.camelot_extractor:
                     # Check if PDF is text-based (Camelot requirement)
                     if is_text_based_pdf(pdf_path):
-                        if docling_tables:
+                        if docling_raw_tables or docling_tables:
                             logger.info(
                                 "Step 3.5: Running Camelot dual extraction with docling"
                             )
@@ -264,8 +285,160 @@ class PaperExtractor:
                                     f"Camelot found {len(camelot_tables)} tables"
                                 )
 
-                                # Handle both Camelot-only and dual extraction modes
-                                if docling_tables:
+                                # Handle raw table mode vs structured mode
+                                if docling_raw_tables:
+                                    # RAW EXTRACTION MODE: Simple dual extraction with DataFrames
+                                    from enlace.models.dual_extraction import (
+                                        DualExtractionTable,
+                                        ReconciliationMetadata,
+                                    )
+
+                                    # Match raw docling tables with Camelot by page number and size
+                                    dual_tables = []
+                                    used_camelot = set()
+
+                                    for raw_table in docling_raw_tables:
+                                        docling_df = raw_table["dataframe"]
+                                        docling_page = raw_table["page"]
+
+                                        # Try to find matching Camelot table on same page
+                                        best_match = None
+                                        best_score = 0
+
+                                        for idx, camelot_table in enumerate(
+                                            camelot_tables
+                                        ):
+                                            if idx in used_camelot:
+                                                continue
+
+                                            # Check page match
+                                            if (
+                                                camelot_table.page_number
+                                                == docling_page
+                                            ):
+                                                # Check dimension similarity
+                                                camelot_df = camelot_table.dataframe
+                                                size_score = min(
+                                                    len(docling_df)
+                                                    / max(len(camelot_df), 1),
+                                                    len(camelot_df)
+                                                    / max(len(docling_df), 1),
+                                                )
+                                                if size_score > best_score:
+                                                    best_score = size_score
+                                                    best_match = (idx, camelot_table)
+
+                                        # If good match found (>0.5 similarity), reconcile
+                                        if best_match and best_score > 0.5:
+                                            idx, camelot_table = best_match
+                                            used_camelot.add(idx)
+
+                                            # Use Camelot DF as primary (better structure)
+                                            reconciled_df = camelot_table.dataframe
+                                            source = "camelot_primary"
+                                        else:
+                                            # Use docling only
+                                            reconciled_df = docling_df
+                                            camelot_table = None
+                                            source = "docling_only"
+
+                                        # Create DualExtractionTable with DataFrame
+                                        table_id = f"table_{raw_table['index'] + 1}"
+                                        dual_table = DualExtractionTable(
+                                            table_id=table_id,
+                                            docling_table=None,  # No structured table
+                                            docling_dataframe=docling_df.to_dict(
+                                                orient="records"
+                                            ),
+                                            camelot_dataframe=camelot_table.dataframe.to_dict(
+                                                orient="records"
+                                            )
+                                            if camelot_table
+                                            else None,
+                                            camelot_quality={
+                                                "accuracy": camelot_table.accuracy
+                                                if camelot_table
+                                                else None,
+                                                "page": camelot_table.page_number
+                                                if camelot_table
+                                                else docling_page,
+                                                "whitespace": camelot_table.whitespace
+                                                if camelot_table
+                                                else None,
+                                            }
+                                            if camelot_table
+                                            else {"page": docling_page},
+                                            reconciled_table=None,  # No structured table
+                                            reconciled_dataframe=reconciled_df.to_dict(
+                                                orient="records"
+                                            ),
+                                            reconciliation_metadata=ReconciliationMetadata(
+                                                source=source,
+                                                cells_from_docling=0,
+                                                cells_from_camelot=0,
+                                                cells_total=0,
+                                                cells_disagreed=0,
+                                                agreement_rate=0.0,
+                                            ),
+                                        )
+
+                                        # Store title for later enhancement
+                                        dual_table._raw_title = raw_table.get("title")
+
+                                        dual_tables.append(dual_table)
+
+                                    # Add unmatched high-quality Camelot tables
+                                    for idx, camelot_table in enumerate(camelot_tables):
+                                        if (
+                                            idx not in used_camelot
+                                            and camelot_table.accuracy >= 60
+                                        ):
+                                            table_id = f"camelot_only_table_(page_{camelot_table.page_number})"
+                                            dual_table = DualExtractionTable(
+                                                table_id=table_id,
+                                                docling_table=None,
+                                                docling_dataframe=None,
+                                                camelot_dataframe=camelot_table.dataframe.to_dict(
+                                                    orient="records"
+                                                ),
+                                                camelot_quality={
+                                                    "accuracy": camelot_table.accuracy,
+                                                    "page": camelot_table.page_number,
+                                                    "whitespace": camelot_table.whitespace,
+                                                },
+                                                reconciled_table=None,
+                                                reconciled_dataframe=camelot_table.dataframe.to_dict(
+                                                    orient="records"
+                                                ),
+                                                reconciliation_metadata=ReconciliationMetadata(
+                                                    source="camelot_only",
+                                                    cells_from_docling=0,
+                                                    cells_from_camelot=0,
+                                                    cells_total=0,
+                                                    cells_disagreed=0,
+                                                    agreement_rate=0.0,
+                                                ),
+                                            )
+                                            dual_table._raw_title = None
+                                            dual_tables.append(dual_table)
+
+                                    # Sort by page
+                                    dual_tables.sort(
+                                        key=lambda dt: dt.camelot_quality.get(
+                                            "page", 999
+                                        )
+                                    )
+
+                                    result.dual_extraction_tables = dual_tables
+                                    result.camelot_enabled = True
+                                    result.tables = []  # No structured tables in raw mode
+                                    result.tables_extracted = len(dual_tables)
+
+                                    logger.info(
+                                        f"Raw dual extraction complete: {len(dual_tables)} total tables"
+                                    )
+
+                                elif docling_tables:
                                     # Dual extraction mode: reconcile docling + Camelot
                                     matched_pairs = self.reconciler.match_tables(
                                         docling_tables, camelot_tables
@@ -446,6 +619,25 @@ class PaperExtractor:
                         result.tables_extracted = 0
                         logger.warning("No table extraction method enabled")
 
+                # Enhance all final table titles from markdown captions
+                # This applies to all tables regardless of extraction method
+                if result.dual_extraction_tables:
+                    # For raw dual extraction mode, enhance titles on dual tables
+                    logger.info(
+                        f"Enhancing titles for {len(result.dual_extraction_tables)} dual extraction tables"
+                    )
+                    self._enhance_dual_table_titles_from_markdown(
+                        result.dual_extraction_tables, markdown_path
+                    )
+                elif result.tables:
+                    # For structured mode, enhance on result.tables
+                    logger.info(
+                        f"Enhancing titles for {len(result.tables)} final tables"
+                    )
+                    result.tables = self._enhance_table_titles_from_markdown(
+                        result.tables, markdown_path
+                    )
+
             # Step 4: Extract figures
             if self.config.extract_figures:
                 logger.info("Step 4: Extracting figures")
@@ -462,7 +654,7 @@ class PaperExtractor:
 
                     if hashed_images:
                         # Read markdown content
-                        markdown_content = markdown_path.read_text()
+                        markdown_content = markdown_path.read_text(encoding="utf-8")
 
                         # Replace each hashed image reference with sequential figure number
                         for idx, img_file in enumerate(hashed_images, start=1):
@@ -476,7 +668,7 @@ class PaperExtractor:
                             )
 
                         # Write updated markdown
-                        markdown_path.write_text(markdown_content)
+                        markdown_path.write_text(markdown_content, encoding="utf-8")
 
                         # Now remove the hashed images
                         for img_file in hashed_images:
@@ -611,6 +803,177 @@ class PaperExtractor:
         except Exception as e:
             logger.error(f"Augmentation failed: {e}", exc_info=True)
             raise AugmentationError("Failed to augment extraction") from e
+
+    def _enhance_table_titles_from_markdown(
+        self, tables: list, markdown_path: Path
+    ) -> list:
+        """Enhance table titles by parsing full captions from markdown file.
+
+        Args:
+            tables: List of table objects (RegressionTable, SummaryStatisticsTable, BalanceTable)
+            markdown_path: Path to the markdown file
+
+        Returns:
+            List of tables with enhanced titles
+
+        """
+        import re
+
+        try:
+            # Read markdown file
+            markdown_content = markdown_path.read_text(encoding="utf-8")
+
+            # Extract all table captions from markdown
+            # Pattern matches lines like:
+            # "Table 1A-Baseline Summary Statistics"
+            # "Table 2: Credit"
+            # "Table 3-Self-Employment Activities: Revenues, Assets, and Profits ( All households )"
+            caption_pattern = r"^(Table\s+\d+[A-Z]?)\s*[-:—–]\s*(.+)$"
+            caption_matches = re.finditer(
+                caption_pattern, markdown_content, re.MULTILINE | re.IGNORECASE
+            )
+
+            # Build a mapping of table numbers to full captions
+            caption_map = {}
+            for match in caption_matches:
+                table_num = match.group(1).strip()  # e.g., "Table 1A"
+                full_caption = match.group(
+                    0
+                ).strip()  # e.g., "Table 1A-Baseline Summary Statistics"
+                caption_map[table_num.lower()] = full_caption
+
+            logger.info(f"Found {len(caption_map)} table captions in markdown")
+            if caption_map:
+                logger.info(f"Caption map keys: {list(caption_map.keys())}")
+
+            # Update table titles - match by position since titles are empty
+            enhanced_count = 0
+
+            # Try to match tables by their position in the document
+            # Tables are extracted in order, captions in markdown are also in order
+            caption_list = list(caption_map.values())
+
+            for i, table in enumerate(tables):
+                table_title = getattr(table, "title", None)
+                table_number = getattr(table, "table_number", None)
+                logger.info(
+                    f"Processing table {i + 1}/{len(tables)}: title='{table_title}', table_number='{table_number}'"
+                )
+
+                # If we have enough captions, assign by position
+                if i < len(caption_list):
+                    table.title = caption_list[i]
+                    enhanced_count += 1
+                    logger.info(
+                        f"Assigned caption by position {i + 1}: '{caption_list[i]}'"
+                    )
+
+            logger.info(
+                f"Enhanced {enhanced_count} table titles from markdown captions"
+            )
+
+            return tables
+
+        except Exception as e:
+            logger.warning(f"Failed to enhance table titles from markdown: {e}")
+            return tables  # Return tables unchanged if enhancement fails
+
+    def _enhance_dual_table_titles_from_markdown(
+        self, dual_tables: list, markdown_path: Path
+    ) -> None:
+        """Enhance dual extraction table titles from markdown captions.
+
+        Modifies dual_tables in-place, updating table_id with proper names.
+
+        Args:
+            dual_tables: List of DualExtractionTable objects
+            markdown_path: Path to markdown file with captions
+
+        """
+        try:
+            import re
+
+            # Read markdown file
+            with open(markdown_path, encoding="utf-8") as f:
+                markdown_text = f.read()
+
+            # Extract table captions
+            caption_pattern = r"^Table\s+(\d+[A-Z]?)[:\-]\s*(.+?)(?=\n|$)"
+            matches = re.finditer(
+                caption_pattern, markdown_text, re.MULTILINE | re.IGNORECASE
+            )
+
+            captions = {}
+            for match in matches:
+                table_num = match.group(1).upper()
+                caption = match.group(2).strip()
+                captions[table_num] = caption
+                logger.debug(f"Found caption for Table {table_num}: {caption[:50]}...")
+
+            if not captions:
+                logger.warning("No table captions found in markdown")
+                return
+
+            logger.info(f"Found {len(captions)} table captions in markdown")
+
+            # Assign captions to dual tables by position
+            enhanced_count = 0
+            for idx, dual_table in enumerate(dual_tables):
+                caption_idx = idx + 1
+
+                # Find matching caption
+                matched_caption = None
+                for table_num, caption in captions.items():
+                    if (
+                        caption_idx == 1
+                        and table_num in ["1", "1A"]
+                        or caption_idx == int(re.sub(r"[A-Z]", "", table_num))
+                    ):
+                        matched_caption = caption
+                        break
+
+                if not matched_caption and caption_idx <= len(captions):
+                    # Fallback: use by position
+                    caption_list = list(captions.values())
+                    matched_caption = (
+                        caption_list[caption_idx - 1]
+                        if caption_idx <= len(caption_list)
+                        else None
+                    )
+
+                if matched_caption:
+                    # Update table_id with caption-based name
+                    safe_name = self._sanitize_title_for_filename(matched_caption)
+                    dual_table.table_id = f"{caption_idx}_{safe_name}"
+                    enhanced_count += 1
+                    logger.debug(
+                        f"Enhanced dual table {caption_idx}: {dual_table.table_id}"
+                    )
+
+            logger.info(
+                f"Enhanced {enhanced_count} dual table titles from markdown captions"
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to enhance dual table titles from markdown: {e}")
+
+    def _sanitize_title_for_filename(self, title: str, max_length: int = 100) -> str:
+        """Convert title to safe filename component."""
+        import re
+
+        # Remove unsafe characters
+        safe_title = re.sub(r'[<>:"/\\|?*]', "", title)
+        # Replace spaces with underscores
+        safe_title = re.sub(r"[\s\-]+", "_", safe_title)
+        # Remove multiple underscores
+        safe_title = re.sub(r"_+", "_", safe_title)
+        # Remove leading/trailing underscores
+        safe_title = safe_title.strip("_")
+        # Truncate
+        if len(safe_title) > max_length:
+            safe_title = safe_title[:max_length].rstrip("_")
+
+        return safe_title.lower()
 
     def _initialize_augmentation(self):
         """Initialize semantic augmentation components."""

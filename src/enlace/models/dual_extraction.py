@@ -16,12 +16,13 @@ class ReconciliationMetadata(BaseModel):
     """Metadata about table reconciliation process.
 
     Attributes:
+        source: Source of the table data ('camelot_primary', 'docling_only', 'camelot_only', 'merged')
         cells_total: Total number of cells in table
+        cells_from_docling: Cells where docling value was selected
+        cells_from_camelot: Cells where Camelot value was selected
         cells_agreed: Number of cells where both extractors agreed
         cells_disagreed: Number of cells with different values
         agreement_rate: Proportion of cells that agreed (0-1)
-        cells_reconciled_by_docling: Cells where docling value was selected
-        cells_reconciled_by_camelot: Cells where Camelot value was selected
         cells_reconciled_by_heuristic: Cells reconciled using heuristics
         reconciliation_strategy: Strategy used for reconciliation
         confidence_score: Overall confidence in reconciled result (0-1)
@@ -31,28 +32,36 @@ class ReconciliationMetadata(BaseModel):
 
     """
 
-    cells_total: int = Field(description="Total number of cells in table")
-    cells_agreed: int = Field(description="Number of cells where extractors agreed")
-    cells_disagreed: int = Field(description="Number of cells with disagreements")
+    source: str = Field(default="unknown", description="Source of the table data")
+    cells_total: int = Field(default=0, description="Total number of cells in table")
+    cells_from_docling: int = Field(
+        default=0, description="Cells where docling value was selected"
+    )
+    cells_from_camelot: int = Field(
+        default=0, description="Cells where Camelot value was selected"
+    )
+    cells_agreed: int = Field(
+        default=0, description="Number of cells where extractors agreed"
+    )
+    cells_disagreed: int = Field(
+        default=0, description="Number of cells with disagreements"
+    )
     agreement_rate: float = Field(
+        default=0.0,
         description="Proportion of cells that agreed (0-1)",
         ge=0.0,
         le=1.0,
-    )
-    cells_reconciled_by_docling: int = Field(
-        description="Cells where docling value was selected"
-    )
-    cells_reconciled_by_camelot: int = Field(
-        description="Cells where Camelot value was selected"
     )
     cells_reconciled_by_heuristic: int = Field(
         default=0,
         description="Cells reconciled using heuristics",
     )
     reconciliation_strategy: str = Field(
-        description="Strategy used (confidence_based, prefer_camelot, prefer_docling)"
+        default="unknown",
+        description="Strategy used (confidence_based, prefer_camelot, prefer_docling)",
     )
     confidence_score: float = Field(
+        default=0.0,
         description="Overall confidence in reconciled result (0-1)",
         ge=0.0,
         le=1.0,
@@ -62,11 +71,13 @@ class ReconciliationMetadata(BaseModel):
         description="Average OCR confidence from docling",
     )
     camelot_accuracy: float = Field(
+        default=0.0,
         description="Camelot accuracy score (0-100)",
         ge=0.0,
         le=100.0,
     )
     camelot_whitespace: float = Field(
+        default=0.0,
         description="Camelot whitespace score (0-100)",
         ge=0.0,
         le=100.0,
@@ -77,23 +88,29 @@ class DualExtractionTable(BaseModel):
     """Stores results from both docling and Camelot extraction.
 
     This model preserves all three versions of the table:
-    1. Original docling extraction
-    2. Original Camelot extraction
-    3. Reconciled/merged result
+    1. Original docling extraction (structured or raw DataFrame)
+    2. Original Camelot extraction (raw DataFrame)
+    3. Reconciled/merged result (structured or raw DataFrame)
 
     Attributes:
         table_id: Unique identifier for this table
-        docling_table: Table extracted by docling parser
+        docling_table: Table extracted by docling parser (optional for raw mode)
+        docling_dataframe: Raw DataFrame from Docling (for raw extraction)
         camelot_dataframe: Raw DataFrame from Camelot (serialized as dict)
         camelot_quality: Camelot quality metrics
-        reconciled_table: Final merged table
+        reconciled_table: Final merged table (optional for raw mode)
+        reconciled_dataframe: Final merged DataFrame (for raw extraction)
         reconciliation_metadata: Metadata about reconciliation process
 
     """
 
     table_id: str = Field(description="Unique identifier for this table")
-    docling_table: RegressionTable | SummaryStatisticsTable | BalanceTable = Field(
-        description="Table extracted by docling"
+    docling_table: RegressionTable | SummaryStatisticsTable | BalanceTable | None = (
+        Field(None, description="Table extracted by docling (semantic parsing)")
+    )
+    docling_dataframe: Any | None = Field(
+        None,
+        description="Docling raw DataFrame (for structure-preserving extraction)",
     )
     camelot_dataframe: Any | None = Field(
         None,
@@ -103,8 +120,12 @@ class DualExtractionTable(BaseModel):
         default_factory=dict,
         description="Camelot quality metrics (accuracy, whitespace, flavor, etc)",
     )
-    reconciled_table: RegressionTable | SummaryStatisticsTable | BalanceTable = Field(
-        description="Final reconciled/merged table"
+    reconciled_table: RegressionTable | SummaryStatisticsTable | BalanceTable | None = (
+        Field(None, description="Final reconciled/merged table (semantic)")
+    )
+    reconciled_dataframe: Any | None = Field(
+        None,
+        description="Final reconciled/merged DataFrame (raw mode)",
     )
     reconciliation_metadata: ReconciliationMetadata = Field(
         description="Metadata about reconciliation process"

@@ -54,8 +54,11 @@ class TableParser:
         # VLM extractor (lazy-loaded)
         self.vlm_extractor = None
 
-        # Configure docling converter
-        table_structure_options = TableStructureOptions(do_cell_matching=True)
+        # Configure docling converter with enhanced table detection
+        table_structure_options = TableStructureOptions(
+            do_cell_matching=True,
+            mode="accurate",  # Use accurate mode for better detection
+        )
         pdf_pipeline_options = PdfPipelineOptions(
             do_table_structure=True,
             do_ocr=enable_ocr,
@@ -63,6 +66,8 @@ class TableParser:
             generate_page_images=extract_figures,
             generate_picture_images=extract_figures,
             images_scale=2.0,
+            # Enable artifacts extraction to capture more table structures
+            artifacts_path=None,
         )
 
         self.converter = DocumentConverter(
@@ -70,6 +75,59 @@ class TableParser:
                 "pdf": PdfFormatOption(pipeline_options=pdf_pipeline_options)
             }
         )
+
+    def extract_raw_tables(self, doc: DoclingDocument) -> list[dict]:
+        """Extract raw tables as DataFrames preserving original structure.
+
+        This method extracts tables without semantic parsing, preserving
+        the exact structure from the document like Camelot does.
+
+        Args:
+            doc: Docling document with tables
+
+        Returns:
+            List of dicts with table metadata and DataFrame
+
+        """
+        import pandas as pd
+
+        raw_tables = []
+
+        for i, table in enumerate(doc.tables):
+            # Get raw table structure
+            structure = self._get_table_structure(table)
+            rows = structure["data"]
+            caption = structure["caption"]
+            page_no = structure["page"]
+
+            if not rows:
+                continue
+
+            # Convert to DataFrame preserving exact structure
+            df = pd.DataFrame(rows)
+
+            # Extract table number from caption
+            table_number = None
+            if caption:
+                import re
+
+                match = re.search(r"(?:Table|TABLE)\s+(\d+[A-Za-z]?)", caption)
+                if match:
+                    table_number = match.group(1)
+
+            raw_tables.append(
+                {
+                    "dataframe": df,
+                    "caption": caption,
+                    "table_number": table_number,
+                    "page": page_no,
+                    "index": i,
+                    "title": caption,  # For compatibility
+                }
+            )
+
+        logger.info(f"Extracted {len(raw_tables)} raw tables from Docling")
+        return raw_tables
 
     def parse_tables_from_document(
         self, doc: DoclingDocument, source_file: str
@@ -111,6 +169,18 @@ class TableParser:
 
             # Get context text before table
             context = self._get_text_before_table(doc, table)
+
+            # Try to extract full table caption from context
+            enhanced_caption = self._extract_full_caption(caption, context)
+            if enhanced_caption:
+                logger.debug(
+                    f"Enhanced caption from '{caption}' to '{enhanced_caption}'"
+                )
+                caption = enhanced_caption
+            else:
+                logger.debug(
+                    f"Could not enhance caption '{caption}', context: {context[:200] if context else 'None'}"
+                )
 
             # Classify and parse table
             if self._is_balance_table(rows, caption):
@@ -407,6 +477,53 @@ class TableParser:
                     context_text.pop(0)
 
         return " ".join(context_text) if context_text else ""
+
+    def _extract_full_caption(self, basic_caption: str, context: str) -> str | None:
+        """Extract full table caption from context text.
+
+        Docling often captures only "Table X" as the caption, but the full
+        descriptive caption like "Table X-Description" or "Table X: Description"
+        appears in the text before the table.
+
+        Args:
+            basic_caption: Basic caption from Docling (e.g., "Table 1")
+            context: Text appearing before the table
+
+        Returns:
+            Full caption if found, None otherwise
+
+        """
+        import re
+
+        if not basic_caption or not context:
+            return None
+
+        # Extract table number from basic caption
+        match = re.search(r"Table\s+(\d+[A-Z]?)", basic_caption, re.IGNORECASE)
+        if not match:
+            return None
+
+        table_num = match.group(1)
+
+        # Look for patterns like:
+        # "Table 1A-Description text"
+        # "Table 1: Description text"
+        # "Table 1 - Description text"
+        # Case insensitive, capture everything up to a sentence end or newline
+        patterns = [
+            rf"Table\s+{re.escape(table_num)}\s*[-:—–]\s*([^\n\.]+)",
+            rf"Table\s+{re.escape(table_num)}\s+([A-Z][^\n\.]+)",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, context, re.IGNORECASE)
+            if match:
+                full_caption = match.group(0).strip()
+                # Clean up any trailing whitespace or partial sentences
+                full_caption = re.sub(r"\s+", " ", full_caption)
+                return full_caption
+
+        return None
 
     def _calculate_table_quality(self, table) -> dict[str, Any]:
         """Calculate quality metrics for a parsed regression table.

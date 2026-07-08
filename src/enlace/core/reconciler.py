@@ -702,9 +702,12 @@ class TableReconciler:
         Handles:
         - Regular numbers: "1.234", "-0.5"
         - Percentages: "12.3%"
-        - Parentheses (negative): "(0.5)"
         - Significance stars: "0.123***"
         - Thousands separators: "1,234.5"
+
+        Note: Parentheses are NOT treated as negatives anymore - they are preserved
+        as they typically represent standard errors or other values, not negative numbers.
+        Negative numbers should have explicit minus signs.
 
         Args:
             text: Text to parse.
@@ -724,9 +727,9 @@ class TableReconciler:
         cleaned = cleaned.replace("$", "")  # Dollar sign
         cleaned = cleaned.strip()
 
-        # Handle parentheses (negative numbers)
-        if cleaned.startswith("(") and cleaned.endswith(")"):
-            cleaned = "-" + cleaned[1:-1]
+        # Remove parentheses but DO NOT treat as negative
+        # Parentheses typically indicate standard errors, not negative values
+        cleaned = cleaned.replace("(", "").replace(")", "")
 
         # Try to parse
         try:

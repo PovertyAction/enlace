@@ -21,6 +21,7 @@ sdist/
 var/
 wheels/
 share/python-wheels/
+*.whl
 *.egg-info/
 .installed.cfg
 *.egg
@@ -176,3 +177,4 @@ data/**/*.csv
 data/**/*.parquet
 data/**/*.xls
 data/**/*.xlsx
+*.docx
